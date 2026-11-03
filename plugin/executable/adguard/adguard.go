@@ -330,6 +330,9 @@ func (p *AdguardRule) Exec(_ context.Context, qCtx *query_context.Context) error
 		return nil
 	}
 
+	// 标记命中来源，让审计能区分「广告拦截」与「未分类(unmatched_rule)」。
+	qCtx.StoreValue(query_context.KeyDomainSet, "adguard")
+
 	if r := buildBlockResponse(q, question, p.blockMode, res.IPs); r != nil {
 		qCtx.SetResponse(r)
 	}

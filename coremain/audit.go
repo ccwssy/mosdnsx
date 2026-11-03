@@ -298,7 +298,7 @@ func (c *AuditCollector) internString(s string) string {
 	switch s {
 	case "A", "AAAA", "CNAME", "TXT", "NS", "MX", "PTR", "SOA", "SRV", "HTTPS", "SVCB",
 		"NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP", "REFUSED", "IN",
-		"NO_RESPONSE", "unmatched_rule":
+		"NO_RESPONSE", "unmatched_rule", "adguard":
 		return s
 	}
 
