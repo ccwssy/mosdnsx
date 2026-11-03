@@ -1055,6 +1055,9 @@
         };
         const cacheOrder = ['cache_all', 'cache_cn', 'cache_google', 'cache_node']; 
         let visibleCards = JSON.parse(localStorage.getItem('visibleMosdnsCards')) || cacheOrder;
+        // 实际生效的缓存标签：优先采用 /metrics 里真实存在的 tag，兼容官方单 cache 配置（tag="cache"）
+        let activeCacheOrder = cacheOrder.slice();
+        let metricsTagsResolved = false;
 
         function setTheme(mode) {
             currentTheme = mode; const theme = themeMap[mode] || themeMap.light;
@@ -1123,7 +1126,19 @@
                 const data = { caches: {}, system: {} };
                 const systemMetrics = parseSystemMetrics(text);
                 
-                cacheOrder.forEach(key => {
+                const foundTags = [...text.matchAll(/mosdns_cache_query_total\{tag="([^"]+)"\}/g)].map(m => m[1]);
+                if (!metricsTagsResolved && foundTags.length && !foundTags.every(t => cacheOrder.includes(t))) {
+                    metricsTagsResolved = true;
+                    activeCacheOrder = foundTags.slice();
+                    foundTags.forEach(t => {
+                        if (!cacheConfig[t]) {
+                            cacheConfig[t] = { default: t, modeB: t, title: t === 'cache' ? 'DNS 缓存' : `缓存 ${t}` };
+                        }
+                    });
+                    visibleCards = foundTags.slice();
+                    try { localStorage.setItem('visibleMosdnsCards', JSON.stringify(visibleCards)); } catch (e) {}
+                }
+                activeCacheOrder.forEach(key => {
                     const config = cacheConfig[key];
                     const effectiveTag = coreMode === 'B' ? config.modeB : config.default;
                     const metrics = parseMetrics(text, effectiveTag);
@@ -1168,7 +1183,7 @@
             await ensureChartsLoaded();
             if (forceRebuild) { getById('main-content').innerHTML = ''; Object.values(chartInstances).forEach(c => c.destroy()); chartInstances = {}; }
             
-            cacheOrder.forEach(key => {
+            activeCacheOrder.forEach(key => {
                 let card = D.querySelector(`.card[data-tag="${key}"]`);
                 const config = cacheConfig[key];
                 let title = coreMode === 'B' ? (config.titleModeB || config.title) : config.title;
@@ -1211,7 +1226,7 @@
         function setupCardToggles() { 
             const container = getById('card-toggles');
             container.innerHTML = ''; 
-            cacheOrder.forEach(tag => { 
+            activeCacheOrder.forEach(tag => { 
                 const toggleId = `card-toggle-${tag}`;
                 const label = createElement('label', 'control-base-label');
                 label.htmlFor = toggleId;
