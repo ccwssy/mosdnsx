@@ -110,9 +110,24 @@ func (s *AuditFileStore) Write(logs []AuditLog) {
 	}
 }
 
-// Flush 立即把内存缓冲落盘（优雅关闭与测试使用）。
+// Flush 排空投递队列并立即落盘（优雅关闭与测试使用）。
+//
+// 必须先排空 ch：Write 是异步投递，队列里可能还压着未 append 的批次，
+// 直接 flushBuf 只能刷到已经进内存缓冲的那部分，落盘体积会偏小。
 func (s *AuditFileStore) Flush() {
-	s.flushBuf()
+	for {
+		select {
+		case batch, ok := <-s.ch:
+			if !ok {
+				s.flushBuf()
+				return
+			}
+			s.appendBuf(batch)
+		default:
+			s.flushBuf()
+			return
+		}
+	}
 }
 
 // Close 停止后台写入并落盘残留数据。
@@ -138,8 +153,7 @@ func (s *AuditFileStore) writer() {
 				s.flushBuf()
 				return
 			}
-			s.appendBuf(batch)
-			if s.bufEntries >= auditFlushEvery {
+			if s.appendBuf(batch) >= auditFlushEvery {
 				s.flushBuf()
 			}
 		case <-ticker.C:
@@ -148,8 +162,8 @@ func (s *AuditFileStore) writer() {
 	}
 }
 
-// appendBuf 把一批日志编码进内存缓冲（不落盘）。
-func (s *AuditFileStore) appendBuf(logs []AuditLog) {
+// appendBuf 把一批日志编码进内存缓冲（不落盘），返回缓冲中的总条目数。
+func (s *AuditFileStore) appendBuf(logs []AuditLog) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, log := range logs {
@@ -161,6 +175,7 @@ func (s *AuditFileStore) appendBuf(logs []AuditLog) {
 		s.buf = append(s.buf, '\n')
 		s.bufEntries++
 	}
+	return s.bufEntries
 }
 
 // flushBuf 把缓冲一次性写入文件。
