@@ -156,6 +156,9 @@ func NewServer(sf *serverFlags) (*Mosdns, error) {
 
 	mlog.L().Info("main config loaded", zap.String("file", fileUsed))
 
+	// 供只读查询（名单枚举）使用。
+	MainConfig = cfg
+
 	return NewMosdns(cfg)
 }
 

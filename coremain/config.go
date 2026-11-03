@@ -23,6 +23,9 @@ import (
 	"github.com/IrineSistiana/mosdns/v5/mlog"
 )
 
+// MainConfig 是当前加载的主配置，供只读查询（名单枚举等）使用。
+var MainConfig *Config
+
 type Config struct {
 	Log     mlog.LogConfig `yaml:"log"`
 	Include []string       `yaml:"include"`
