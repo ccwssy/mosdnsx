@@ -119,6 +119,15 @@ const (
 
 type AuditSettings struct {
 	Capacity int `json:"capacity"`
+
+	// FileEnabled 开启查询日志落盘（对齐 AdGuardHome 的 querylog.file_enabled）。
+	FileEnabled bool `json:"file_enabled"`
+	// FileDir 是落盘目录，留空时使用 <config_base_dir>/audit。
+	FileDir string `json:"file_dir,omitempty"`
+	// RetentionDays 是日志保留天数，留空或 <=0 时按 7 天。
+	RetentionDays int `json:"retention_days,omitempty"`
+	// FileMaxMB 是单个日志文件的体积上限（MB），超过后滚动新文件。
+	FileMaxMB int64 `json:"file_max_mb,omitempty"`
 }
 
 type slowestQueryHeap []AuditLog
@@ -163,9 +172,19 @@ type AuditCollector struct {
 
 var GlobalAuditCollector = NewAuditCollector(defaultAuditCapacity)
 
+// GlobalAuditFileStore 是查询日志落盘器，未启用时为 nil。
+var GlobalAuditFileStore *AuditFileStore
+
+// auditSettingsPath 记录配置文件路径，供后续保存设置时复用。
+var auditSettingsPath string
+
+// auditFileCfg 保存当前生效的落盘配置，避免保存容量时丢失这些字段。
+var auditFileCfg AuditSettings
+
 func InitializeAuditCollector(configBaseDir string) {
 	initialCapacity := defaultAuditCapacity
 	settingsPath := filepath.Join(configBaseDir, auditSettingsFilename)
+	auditSettingsPath = settingsPath
 	settings := &AuditSettings{}
 	data, err := os.ReadFile(settingsPath)
 
@@ -182,8 +201,33 @@ func InitializeAuditCollector(configBaseDir string) {
 		}
 	}
 
+	auditFileCfg = *settings
+
 	if initialCapacity != defaultAuditCapacity {
 		GlobalAuditCollector = NewAuditCollector(initialCapacity)
+	}
+
+	// 查询日志落盘：先回填历史，再启动写入。
+	if settings.FileEnabled {
+		dir := settings.FileDir
+		if dir == "" {
+			dir = filepath.Join(configBaseDir, "audit")
+		} else if !filepath.IsAbs(dir) {
+			dir = filepath.Join(configBaseDir, dir)
+		}
+		dir = filepath.Clean(dir)
+
+		if store, err := newAuditFileStore(dir, settings.RetentionDays, settings.FileMaxMB); err == nil {
+			GlobalAuditFileStore = store
+			if history := loadAuditLogsFromDisk(dir, GlobalAuditCollector.GetCapacity()); len(history) > 0 {
+				GlobalAuditCollector.SeedLogs(history)
+				mlog.S().Infof("Loaded %d audit logs from disk", len(history))
+			}
+			mlog.S().Infof("Audit log file persistence enabled: %s (retention=%d days, max=%d MB)",
+				dir, settings.RetentionDays, settings.FileMaxMB)
+		} else {
+			mlog.L().Error("failed to enable audit log file persistence", zap.Error(err))
+		}
 	}
 }
 
@@ -228,6 +272,11 @@ func (c *AuditCollector) StartWorker() {
 func (c *AuditCollector) StopWorker() {
 	close(c.quitChan)
 	<-c.workerDone
+
+	if store := GlobalAuditFileStore; store != nil {
+		store.Close()
+		GlobalAuditFileStore = nil
+	}
 }
 
 func (c *AuditCollector) worker() {
@@ -375,6 +424,11 @@ func (c *AuditCollector) processBatch(batch []*auditContext) {
 
 	if len(parsedLogs) == 0 {
 		return
+	}
+
+	// 落盘（异步、非阻塞），开启前为 nil。
+	if store := GlobalAuditFileStore; store != nil {
+		store.Write(parsedLogs)
 	}
 
 	// Step 2: 细粒度锁定，仅处理数组追加与增量状态更新，彻底消除耗时
@@ -528,7 +582,9 @@ func (c *AuditCollector) SetCapacity(newCapacity int, configBaseDir string) {
 }
 
 func (c *AuditCollector) saveSettings(capacityToSave int, configBaseDir string) {
-	settings := AuditSettings{Capacity: capacityToSave}
+	settings := auditFileCfg
+	settings.Capacity = capacityToSave
+	auditFileCfg = settings
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		mlog.L().Error("failed to marshal audit settings", zap.Error(err))

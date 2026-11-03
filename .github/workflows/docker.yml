@@ -1,0 +1,73 @@
+name: docker
+
+# 构建并推送容器镜像到 GitHub Container Registry。
+# 触发：推 tag（v*）、推 main、手动触发。
+# 产物：ghcr.io/<owner>/<repo>:<版本> 与 :latest（仅默认分支/最新 tag）
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      image: ${{ steps.ver.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 计算版本号
+        id: ver
+        run: |
+          base=$(tr -d '[:space:]' < VERSION)
+          date=$(date +%Y%m%d)
+          sha=$(git rev-parse --short=7 HEAD)
+          version="${base}-${date}-${sha}"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "版本号: ${version}"
+          echo "镜像: ${image}"
+
+  build:
+    needs: meta
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 QEMU（arm64 交叉构建）
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 构建并推送（amd64 + arm64）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ needs.meta.outputs.version }}
+          tags: |
+            ${{ needs.meta.outputs.image }}:${{ needs.meta.outputs.version }}
+            ${{ needs.meta.outputs.image }}:latest
+          labels: |
+            org.opencontainers.image.version=${{ needs.meta.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
