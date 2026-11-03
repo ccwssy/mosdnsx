@@ -1146,6 +1146,7 @@
                 });
                 
                 data.system = { start_time: systemMetrics.startTime ? new Date(systemMetrics.startTime * 1000).toLocaleString() : 'N/A', cpu_time: `${systemMetrics.cpuTime.toFixed(2)} 秒`, resident_memory: `${(systemMetrics.residentMemory / 1024 / 1024).toFixed(2)} MB`, net_recv: `${(systemMetrics.netRecv / 1024 / 1024 / 1024).toFixed(2)} GB`, net_send: `${(systemMetrics.netSend / 1024 / 1024 / 1024).toFixed(2)} GB`, gc_count: systemMetrics.gcCount.toLocaleString(), gc_sum: `${systemMetrics.gcSum.toFixed(3)} 秒`, last_gc_time: systemMetrics.lastGcTime ? new Date(systemMetrics.lastGcTime * 1000).toLocaleString() : 'N/A', go_version: systemMetrics.goVersion, threads: systemMetrics.threads, open_fds: systemMetrics.openFds };
+                try { renderDataViewButtons(); } catch (e) {}
                 return data;
             } catch (error) {
                 console.error('获取 /metrics 失败:', error);
@@ -1743,6 +1744,70 @@
             }
         }
 
+        async function displayAuditDomainsInModal(fakeip, title) {
+            const dataModal = getById('data-view-modal');
+            const dataModalTitle = getById('data-modal-title');
+            const dataModalBody = getById('data-modal-body');
+            const dataModalInfo = getById('data-modal-info');
+            dataModalTitle.textContent = title;
+            dataModalBody.innerHTML = '<div id="loading-spinner" style="display: block; margin: 4rem auto;"></div>';
+            dataModalInfo.textContent = '正在加载...';
+            dataModal.classList.add('visible');
+            dataModalSearchInput.value = '';
+            dataModalSearchInput.oninput = null;
+            try {
+                const startTime = performance.now();
+                const resp = await fetch(`/api/v2/audit/logs?fakeip=${fakeip}&limit=3000`);
+                if (!resp.ok) throw new Error(`网络响应错误: ${resp.status} ${resp.statusText}`);
+                const payload = await resp.json();
+                const seen = new Set();
+                const rows = [];
+                (payload.logs || []).forEach(l => {
+                    if (!l.query_name || seen.has(l.query_name)) return;
+                    seen.add(l.query_name);
+                    const ips = (l.answers || []).filter(a => a.type === 'A' || a.type === 'AAAA').map(a => a.data).join(', ');
+                    rows.push({ id: ips || l.response_code || '-', value: l.query_name, originalLine: `${l.query_name}\t${ips}` });
+                });
+                currentModalData.type = 'table';
+                currentModalData.rawEntries = rows;
+                currentModalData.filteredEntries = rows;
+                currentModalData.totalCount = rows.length;
+                currentModalData.loadTime = (performance.now() - startTime).toFixed(2);
+                renderTableData(rows);
+                dataModalSearchInput.oninput = () => {
+                    const term = dataModalSearchInput.value.toLowerCase();
+                    currentModalData.filteredEntries = rows.filter(r => r.value.toLowerCase().includes(term) || (r.id || '').toLowerCase().includes(term));
+                    renderTableData(currentModalData.filteredEntries);
+                };
+            } catch (e) {
+                dataModalBody.innerHTML = `<p style="color: var(--accent-red); padding: 1rem;">加载失败: ${e.message}</p>`;
+                dataModalInfo.textContent = '加载失败';
+            }
+        }
+
+        // 数据查看按钮按实际存在的 cache tag 生成，fakeip/realip 走审计 API。
+        function renderDataViewButtons() {
+            const dvContainer = getById('data-view-buttons');
+            if (!dvContainer) return;
+            const legacy = ['cache_all', 'cache_all_noleak', 'cache_cn', 'cache_google', 'cache_google_node', 'cache_node'];
+            let tags = (activeCacheOrder || []).filter(t => !legacy.includes(t));
+            if (!tags.length) tags = ['cache'];
+            const endpoints = {};
+            tags.forEach(t => { endpoints[t === 'cache' ? '全部缓存' : `缓存 ${t}`] = { type: 'cache', tag: t }; });
+            endpoints['fakeip 域名'] = { type: 'audit', fakeip: 'true' };
+            endpoints['realip 域名'] = { type: 'audit', fakeip: 'false' };
+            dvContainer.innerHTML = '';
+            Object.entries(endpoints).forEach(([name, ep]) => {
+                const btn = createElement('button', 'btn');
+                btn.textContent = name;
+                btn.onclick = () => {
+                    if (ep.type === 'cache') displayCacheDataInModal(`/plugins/${ep.tag}/show`, name);
+                    else displayAuditDomainsInModal(ep.fakeip, name);
+                };
+                dvContainer.appendChild(btn);
+            });
+        }
+
         async function displayDataInModal(url, title) {
             const dataModal = getById('data-view-modal');
             const dataModalTitle = getById('data-modal-title');
@@ -1822,9 +1887,7 @@
             getById('flush-cache-btn').addEventListener('click', async () => { if (!confirm('确定清空全部缓存吗? 此操作将根据当前核心运行模式清空对应的缓存。')) { return; } const cacheToFlush = coreMode === 'B' ? 'cache_all_noleak' : 'cache_all'; const path = `/plugins/${cacheToFlush}/flush`; try { const response = await fetch(path); if (!response.ok) { const errorText = await response.text(); throw new Error(`清空缓存失败于 ${path}: ${errorText || response.statusText}`); } showToast('全部缓存已清空，正在刷新数据...', 'success'); await refreshData(false, true); } catch (e) { showToast('清空缓存操作失败！', 'error'); showErrorModal(e.message); } });
             getById('restart-mosdns-btn').onclick = async () => { if (confirm('【危险操作】此操作将首先保存所有分流规则，然后重启 MosDNS。确定要继续吗?')) { const saveSuccess = await saveAllRulesAndNotify(); if (saveSuccess) { showToast('规则已保存，正在发送重启命令...', 'success'); try { const response = await fetch('/plugins/my_fakeiplist/restartall'); if (!response.ok) { const errorText = await response.text(); throw new Error(errorText || `重启命令请求失败，状态码: ${response.status}`); } showToast('MosDNS 正在重启，页面即将刷新...'); setTimeout(() => location.reload(), 2000); } catch (e) { showToast('重启命令发送失败', 'error'); showErrorModal(e.message); } } else { showToast('由于规则保存失败，重启操作已取消。', 'error'); } } };getById('dns-log-page-btn').onclick = () => { const url = `http://${window.location.hostname}:${window.location.port}/log`; window.open(url, '_blank'); };
             
-            const showEndpoints = { '请求排行': 'top_domains','fakeip 域名': 'my_fakeiplist', 'realip 域名': 'my_realiplist', '无 V4 域名': 'my_nov4list', '无 V6 域名': 'my_nov6list', '全部缓存（兼容）': 'cache_all', '全部缓存（安全）': 'cache_all_noleak','国内缓存': 'cache_cn', '国外缓存（兼容）': 'cache_google', '国外缓存（安全）': 'cache_google_node','节点缓存': 'cache_node' };
-            const dvContainer = getById('data-view-buttons'); dvContainer.innerHTML = ''; 
-            Object.entries(showEndpoints).forEach(([name, path]) => { const btn = createElement('button', 'btn'); btn.textContent = name; btn.onclick = () => { if (path.startsWith('cache_')) { displayCacheDataInModal(`/plugins/${path}/show`, name); } else { displayDataInModal(`/plugins/${path}/show`, name); } }; dvContainer.appendChild(btn); });
+            renderDataViewButtons();
             
             const tabButtons = D.querySelectorAll('.tab-button');
             const tabContents = D.querySelectorAll('.control-section-body .tab-content');
