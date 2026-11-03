@@ -71,7 +71,7 @@ func collectListPlugins() []ListPluginInfo {
 			Tag:      p.Tag,
 			Type:     p.Type,
 			Files:    files,
-			Editable: p.Type == "domain_set" || p.Type == "domain_set_light",
+			Editable: p.Type == "domain_set" || p.Type == "domain_set_light" || p.Type == "hosts",
 			Name:     p.Tag,
 		}
 		if len(files) > 0 {
