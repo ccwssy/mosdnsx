@@ -7,13 +7,11 @@ ARG CGO_ENABLED=0
 COPY ./ /root/src/
 WORKDIR /root/src/
 
+# VERSION 由调用方注入完整版本号（Makefile / CI 已拼好日期与短 SHA）。
+# 未传时回落到 git describe，避免出现 dev 之外的重复拼接。
 ARG VERSION=""
-ARG BUILD_DATE=""
 RUN set -eux; \
-    base=${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null || echo dev)}; \
-    date=${BUILD_DATE:-$(date +%Y%m%d)}; \
-    sha=$(git rev-parse --short=7 HEAD 2>/dev/null || echo nogithash); \
-    v="$base-$date-$sha"; \
+    v="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"; \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
         -ldflags "-s -w -X main.version=$v" -trimpath -o mosdns .
 

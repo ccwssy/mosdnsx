@@ -17,7 +17,7 @@ GIT_SHA      ?= $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo nogit)
 BUILD_VERSION := $(VERSION_BASE)-$(BUILD_DATE)-$(GIT_SHA)
 
 LDFLAGS := -s -w -X main.version=$(BUILD_VERSION)
-IMAGE   ?= ghcr.io/ccwssy/mosdns
+IMAGE   ?= ghcr.io/ccwssy/mosdnsx
 
 .PHONY: all build test docker version clean
 
@@ -30,7 +30,7 @@ test:
 	go test ./plugin/executable/adguard/ ./coremain/
 
 docker:
-	docker build --build-arg VERSION=$(VERSION_BASE) -t $(IMAGE):$(BUILD_VERSION) -t $(IMAGE):latest .
+	docker build --build-arg VERSION=$(BUILD_VERSION) -t $(IMAGE):$(BUILD_VERSION) -t $(IMAGE):latest .
 
 version:
 	@echo $(BUILD_VERSION)
