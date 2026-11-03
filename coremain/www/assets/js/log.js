@@ -643,23 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const switchManager = {
-        profiles: [
-            { tag: 'switch3', name: '核心运行模式', tip: '切换后将执行一次“全新任务”刷新分流缓存。兼容模式性能更高，安全模式防泄露和劫持能力更强。', modes: { 'A': { name: '兼容模式', icon: 'fa-globe-americas' }, 'B': { name: '安全模式', icon: 'fa-shield-alt' } } },
-            { tag: 'switch1', name: '请求屏蔽', desc: '对无解析结果的请求进行屏蔽', tip: '建议开启，避免无ipv4及ipv6结果的非必要DNS解析。', valueForOn: 'A' },
-            { tag: 'switch5', name: '类型屏蔽', desc: '屏蔽 SOA、PTR、HTTPS 等请求', tip: '建议开启，可减少不必要的网络请求，提高效率。', valueForOn: 'A' },
-            { tag: 'switch4', name: '过期缓存1', desc: '启用国内缓存、国外缓存 (兼容)、国外缓存 (安全)、国内域名fakeip缓存', tip: '建议开启，可以提升重复查询的响应速度，即使缓存已过期。', valueForOn: 'A' },
-            { tag: 'switch13', name: '过期缓存2', desc: '启用全部缓存 (兼容)、全部缓存 (安全)，缓存fakeip，直面客户端', tip: '建议开启，折腾时可临时关闭，排除干扰。', valueForOn: 'A' },
-            { tag: 'switch7', name: '广告屏蔽', desc: '启用Adguard在线规则支持', tip: '此开关开启后，“广告拦截”页签中已启用的在线列表才会生效。', valueForOn: 'A' },
-            { tag: 'switch9', name: 'CNFakeIP', desc: '国内域名返回fakeip', tip: '请在上游dns中配置cnfake组的mihomo条目', valueForOn: 'B' },
-//            { tag: 'switch11', name: '使用阿里私有DOH', desc: '国内上游并发请求至阿里私有DOH。', tip: '打开前在上游DNS设置中添加DOH配置。', valueForOn: 'A' },
-//            { tag: 'switch14', name: '使用运营商DNS', desc: '国内上游并发请求至运营商DNS。', tip: '打开前在上游DNS设置中修改运营商DNS配置。', valueForOn: 'A' },
-            { tag: 'switch15', name: '极限加速', desc: '启用极限缓存，UDP性能翻倍，某些屏蔽日志不显示。', tip: '绕过miekg dns使用偏移量获取域名并缓存byte响应，重启会清空。', valueForOn: 'A' },
-            { tag: 'switch2', name: '指定 Client fakeip', desc: '只允许指定的客户端科学', tip: '按需开启。需要 MosDNS 监听53端口，并正确配置 client_ip 名单。', valueForOn: 'A' },
-            { tag: 'switch12', name: '指定 Client realip', desc: '指定客户端不允许科学', tip: '按需开启。需要 MosDNS 监听53端口，并正确配置 client_ip 名单。', valueForOn: 'A' },
-            { tag: 'switch6', name: 'IPV6屏蔽', desc: '屏蔽AAAA请求类型', tip: '无IPV6网络环境建议开启', valueForOn: 'A' },
-//            { tag: 'switch8', name: 'IPV4优先', desc: 'Prefer IPV4（不建议开启）', tip: '当一个域名有IPV4解析记录时，不返回IPV6解析结果。', valueForOn: 'A' },
-//            { tag: 'switch10', name: 'IPV6优先', desc: 'Prefer IPV6（不建议开启）', tip: '当一个域名有IPV6解析记录时，不返回IPV4解析结果。', valueForOn: 'A' },
-        ],
+        profiles: [{ tag: "high_priority_whitelist", name: "白名单" }, { tag: "high_priority_greylist", name: "灰名单" }],
 
         init() {
             elements.coreModeSwitchGroup.addEventListener('click', e => {
