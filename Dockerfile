@@ -20,3 +20,8 @@ FROM alpine:latest
 COPY --from=builder /root/src/mosdns /usr/bin/
 
 RUN apk add --no-cache ca-certificates
+
+EXPOSE 53/tcp 53/udp 9099/tcp
+
+# 默认以 /etc/mosdns 为工作目录启动；挂载自己的配置目录即可。
+CMD ["/usr/bin/mosdns", "start", "-c", "/etc/mosdns/config.yaml", "-d", "/etc/mosdns"]
