@@ -1,16 +1,21 @@
-FROM golang:latest as builder
+FROM --platform=$BUILDPLATFORM golang:latest AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 ARG CGO_ENABLED=0
 
 COPY ./ /root/src/
 WORKDIR /root/src/
+
 ARG VERSION=""
 ARG BUILD_DATE=""
 RUN set -eux; \
-    base=${VERSION:-$(git describe --tags --abbrev=0 || echo dev)}; \
+    base=${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null || echo dev)}; \
     date=${BUILD_DATE:-$(date +%Y%m%d)}; \
-    sha=$(git rev-parse --short=7 HEAD || echo nogithash); \
+    sha=$(git rev-parse --short=7 HEAD 2>/dev/null || echo nogithash); \
     v="$base-$date-$sha"; \
-    go build -ldflags "-s -w -X main.version=$v" -trimpath -o mosdns
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+        -ldflags "-s -w -X main.version=$v" -trimpath -o mosdns .
 
 FROM alpine:latest
 

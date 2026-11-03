@@ -202,3 +202,58 @@ exec 模式（推荐，能拿到 qtype 与客户端地址，`$dnstype` / `$clien
   只想放行单个子域要写 `@@||pv.sohu.com^`，与 AGH 完全一致。
 - 规则重载失败时保留旧引擎，不会瞬间失去过滤能力。
 - 元素隐藏规则（`##`、`#?#`、`$$`）在 DNS 层无意义，加载时跳过。
+
+## 查询日志落盘（对齐 AdGuardHome querylog）
+
+默认仍是纯内存环形缓冲（重启清零）。开启落盘后，日志按天写入 JSONL，重启自动回填：
+
+```json
+// <config_dir>/audit_settings.json
+{
+  "capacity": 100000,
+  "file_enabled": true,
+  "file_dir": "audit",
+  "retention_days": 7,
+  "file_max_mb": 64
+}
+```
+
+- `file_dir` 留空时为 `<config_dir>/audit`，相对路径按配置目录解析
+- 文件名 `audit-YYYYMMDD.jsonl`，超过 `file_max_mb` 滚动为 `audit-YYYYMMDD-1.jsonl`
+- 启动时读取磁盘最近 `capacity` 条回填内存，面板与 API 在重启后仍能看到历史
+- 超过 `retention_days` 的文件在启动时清理
+- 写盘走独立协程 + 有界队列，队列满时丢日志而不阻塞查询
+
+**另外必须在 server 上开审计**，否则日志不会产生：
+
+```yaml
+- type: udp_server
+  args: { entry: main, listen: ":53", enable_audit: true }
+```
+
+## 版本号约定
+
+`VERSION` 文件写「基线-补丁集」，构建时自动拼上日期与短 SHA：
+
+```
+VERSION 内容        v5.3.4-agh1
+实际二进制版本      v5.3.4-agh1-20261103-be9fb22
+                      └基线┘ └补丁┘ └日期┘  └SHA┘
+```
+
+- **基线**：跟随上游 IrineSistiana/mosdns 的 tag，便于判断代码年代
+- **补丁集**：本分支自有特性编号，功能或行为变更时递增（`agh1` → `agh2`）
+- 日期与 SHA 由 `make build` / CI 注入，不手写
+- `make version` 可预览当前会注入的版本号
+
+## 容器镜像
+
+`.github/workflows/docker.yml` 在推 tag / 推 main / 手动触发时构建 `linux/amd64` + `linux/arm64`
+镜像并推送 GHCR：
+
+```
+ghcr.io/ccwssy/mosdns:<版本>      例如 v5.3.4-agh1-20261103-be9fb22
+ghcr.io/ccwssy/mosdns:latest
+```
+
+本地构建：`make docker`（可用 `IMAGE=...` 覆盖镜像名）。
