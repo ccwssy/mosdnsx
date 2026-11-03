@@ -28,6 +28,7 @@ import (
 
 const (
 	auditLogFilePrefix        = "audit-"
+	auditFakeIPFilePrefix     = "audit-fakeip-"
 	auditLogFileSuffix        = ".jsonl"
 	defaultAuditRetentionDays = 7
 	defaultAuditFileMaxMB     = 64
@@ -55,6 +56,7 @@ type AuditFileStore struct {
 
 	mu        sync.Mutex
 	dir       string
+	prefix    string
 	retention int
 	maxBytes  int64
 	curPath   string
@@ -65,7 +67,7 @@ type AuditFileStore struct {
 }
 
 // newAuditFileStore 创建落盘器并启动后台写入协程。
-func newAuditFileStore(dir string, retentionDays int, maxFileMB int64) (*AuditFileStore, error) {
+func newAuditFileStore(dir string, prefix string, retentionDays int, maxFileMB int64) (*AuditFileStore, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("empty audit log dir")
 	}
@@ -83,6 +85,7 @@ func newAuditFileStore(dir string, retentionDays int, maxFileMB int64) (*AuditFi
 		ch:        make(chan []AuditLog, auditFileQueueSize),
 		done:      make(chan struct{}),
 		dir:       dir,
+		prefix:    prefix,
 		retention: retentionDays,
 		maxBytes:  maxFileMB << 20,
 	}
@@ -211,9 +214,9 @@ func (s *AuditFileStore) ensureFileLocked() (string, error) {
 
 	seq := 0
 	for {
-		name := auditLogFilePrefix + date + auditLogFileSuffix
+		name := s.prefix + date + auditLogFileSuffix
 		if seq > 0 {
-			name = fmt.Sprintf("%s%s-%d%s", auditLogFilePrefix, date, seq, auditLogFileSuffix)
+			name = fmt.Sprintf("%s%s-%d%s", s.prefix, date, seq, auditLogFileSuffix)
 		}
 		path := filepath.Join(s.dir, name)
 

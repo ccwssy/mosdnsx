@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"math"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -101,6 +102,8 @@ type AuditLog struct {
 	ResponseFlags ResponseFlags  `json:"response_flags"`
 	Answers       []AnswerDetail `json:"answers"`
 	DomainSet     string         `json:"domain_set,omitempty"`
+	// FakeIP 表示该应答来自 fake-ip 段（走代理的域名），落盘时单独成一份日志。
+	FakeIP bool `json:"fakeip,omitempty"`
 }
 
 type ResponseFlags struct {
@@ -128,6 +131,12 @@ type AuditSettings struct {
 	RetentionDays int `json:"retention_days,omitempty"`
 	// FileMaxMB 是单个日志文件的体积上限（MB），超过后滚动新文件。
 	FileMaxMB int64 `json:"file_max_mb,omitempty"`
+
+	// FakeIPCidrs 是判定"该应答属于 fake-ip"的网段，命中则单独写入 fakeip 日志文件。
+	// 留空时使用默认 198.18.0.0/15（RFC 2544 保留段，OpenClash 默认 fake-ip 池）。
+	FakeIPCidrs []string `json:"fakeip_cidrs,omitempty"`
+	// FakeIPPrefix 是 fake-ip 日志的文件名前缀，默认 audit-fakeip-。
+	FakeIPPrefix string `json:"fakeip_prefix,omitempty"`
 }
 
 type slowestQueryHeap []AuditLog
@@ -175,6 +184,12 @@ var GlobalAuditCollector = NewAuditCollector(defaultAuditCapacity)
 // GlobalAuditFileStore 是查询日志落盘器，未启用时为 nil。
 var GlobalAuditFileStore *AuditFileStore
 
+// GlobalAuditFakeIPStore 是 fake-ip 查询的独立落盘器，未启用时为 nil。
+var GlobalAuditFakeIPStore *AuditFileStore
+
+// auditFakeIPNets 是 fake-ip 判定网段，空切片表示不做拆分。
+var auditFakeIPNets []netip.Prefix
+
 // auditSettingsPath 记录配置文件路径，供后续保存设置时复用。
 var auditSettingsPath string
 
@@ -217,7 +232,25 @@ func InitializeAuditCollector(configBaseDir string) {
 		}
 		dir = filepath.Clean(dir)
 
-		if store, err := newAuditFileStore(dir, settings.RetentionDays, settings.FileMaxMB); err == nil {
+		// fake-ip 网段：留空用默认 198.18.0.0/15（RFC 2544，OpenClash 默认池）。
+		cidrs := settings.FakeIPCidrs
+		if len(cidrs) == 0 {
+			cidrs = []string{"198.18.0.0/15"}
+		}
+		auditFakeIPNets = nil
+		for _, c := range cidrs {
+			if pfx, perr := netip.ParsePrefix(strings.TrimSpace(c)); perr == nil {
+				auditFakeIPNets = append(auditFakeIPNets, pfx)
+			} else {
+				mlog.L().Warn("invalid fakeip cidr in audit settings", zap.String("cidr", c), zap.Error(perr))
+			}
+		}
+		prefix := settings.FakeIPPrefix
+		if prefix == "" {
+			prefix = auditFakeIPFilePrefix
+		}
+
+		if store, err := newAuditFileStore(dir, auditLogFilePrefix, settings.RetentionDays, settings.FileMaxMB); err == nil {
 			GlobalAuditFileStore = store
 			if history := loadAuditLogsFromDisk(dir, GlobalAuditCollector.GetCapacity()); len(history) > 0 {
 				GlobalAuditCollector.SeedLogs(history)
@@ -227,6 +260,17 @@ func InitializeAuditCollector(configBaseDir string) {
 				dir, settings.RetentionDays, settings.FileMaxMB)
 		} else {
 			mlog.L().Error("failed to enable audit log file persistence", zap.Error(err))
+		}
+
+		// fake-ip 单独一份日志（同一目录、不同前缀）。
+		if len(auditFakeIPNets) > 0 {
+			if store, ferr := newAuditFileStore(dir, prefix, settings.RetentionDays, settings.FileMaxMB); ferr == nil {
+				GlobalAuditFakeIPStore = store
+				mlog.S().Infof("Fake-IP audit log split enabled: %s (%d cidr)",
+					filepath.Join(dir, prefix+"*.jsonl"), len(auditFakeIPNets))
+			} else {
+				mlog.L().Error("failed to enable fake-ip audit log persistence", zap.Error(ferr))
+			}
 		}
 	}
 }
@@ -273,6 +317,10 @@ func (c *AuditCollector) StopWorker() {
 	close(c.quitChan)
 	<-c.workerDone
 
+	if store := GlobalAuditFakeIPStore; store != nil {
+		store.Close()
+		GlobalAuditFakeIPStore = nil
+	}
 	if store := GlobalAuditFileStore; store != nil {
 		store.Close()
 		GlobalAuditFileStore = nil
@@ -416,6 +464,25 @@ func (c *AuditCollector) processBatch(batch []*auditContext) {
 					log.Answers = append(log.Answers, detail)
 				}
 			}
+			// 判定是否走 fake-ip：任一 A 应答落在 fake-ip 网段即算。
+			if len(auditFakeIPNets) > 0 {
+				for _, a := range log.Answers {
+					if a.Type != "A" {
+						continue
+					}
+					if addr, aerr := netip.ParseAddr(a.Data); aerr == nil {
+						for _, pfx := range auditFakeIPNets {
+							if pfx.Contains(addr) {
+								log.FakeIP = true
+								break
+							}
+						}
+					}
+					if log.FakeIP {
+						break
+					}
+				}
+			}
 		} else {
 			log.ResponseCode = "NO_RESPONSE"
 		}
@@ -426,9 +493,20 @@ func (c *AuditCollector) processBatch(batch []*auditContext) {
 		return
 	}
 
-	// 落盘（异步、非阻塞），开启前为 nil。
-	if store := GlobalAuditFileStore; store != nil {
-		store.Write(parsedLogs)
+	// 落盘（异步、非阻塞），按 fake-ip 与否分流到两个文件。
+	var normalLogs, fakeIPLogs []AuditLog
+	for _, log := range parsedLogs {
+		if log.FakeIP {
+			fakeIPLogs = append(fakeIPLogs, log)
+		} else {
+			normalLogs = append(normalLogs, log)
+		}
+	}
+	if store := GlobalAuditFileStore; store != nil && len(normalLogs) > 0 {
+		store.Write(normalLogs)
+	}
+	if store := GlobalAuditFakeIPStore; store != nil && len(fakeIPLogs) > 0 {
+		store.Write(fakeIPLogs)
 	}
 
 	// Step 2: 细粒度锁定，仅处理数组追加与增量状态更新，彻底消除耗时

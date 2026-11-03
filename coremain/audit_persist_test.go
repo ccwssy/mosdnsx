@@ -2,6 +2,7 @@ package coremain
 
 import (
 	"os"
+	"strings"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func mkLog(name string, d time.Duration) AuditLog {
 func TestAuditFileStoreRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	store, err := newAuditFileStore(dir, 7, 16)
+	store, err := newAuditFileStore(dir, auditLogFilePrefix, 7, 16)
 	if err != nil {
 		t.Fatalf("newAuditFileStore: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestAuditFileStorePurgeExpired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	store, err := newAuditFileStore(dir, 7, 16)
+	store, err := newAuditFileStore(dir, auditLogFilePrefix, 7, 16)
 	if err != nil {
 		t.Fatalf("newAuditFileStore: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestAuditFileStoreRollBySize(t *testing.T) {
 	dir := t.TempDir()
 
 	// maxFileMB 最小粒度为 MB，这里直接用小数值验证滚动逻辑（1MB 太大，用 1 并塞满）。
-	store, err := newAuditFileStore(dir, 7, 1)
+	store, err := newAuditFileStore(dir, auditLogFilePrefix, 7, 1)
 	if err != nil {
 		t.Fatalf("newAuditFileStore: %v", err)
 	}
@@ -135,5 +136,65 @@ func TestSeedLogsRebuildsStats(t *testing.T) {
 	}
 	if c.clientCounts["192.168.2.10"] != 3 {
 		t.Errorf("客户端统计未重建: %d, want 3", c.clientCounts["192.168.2.10"])
+	}
+}
+
+// TestAuditFileStoreFakeIPSplit 验证常规日志与 fake-ip 日志写到不同前缀的文件，互不混写。
+func TestAuditFileStoreFakeIPSplit(t *testing.T) {
+	dir := t.TempDir()
+	main, err := newAuditFileStore(dir, auditLogFilePrefix, 7, 64)
+	if err != nil {
+		t.Fatalf("main store: %v", err)
+	}
+	fake, err := newAuditFileStore(dir, auditFakeIPFilePrefix, 7, 64)
+	if err != nil {
+		t.Fatalf("fakeip store: %v", err)
+	}
+	now := time.Now()
+	main.Write([]AuditLog{{QueryName: "normal.example.com", QueryTime: now}})
+	fake.Write([]AuditLog{{QueryName: "proxied.example.com", QueryTime: now, FakeIP: true}})
+	time.Sleep(50 * time.Millisecond)
+	main.Flush()
+	fake.Flush()
+	main.Close()
+	fake.Close()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("readdir: %v", err)
+	}
+	var normalFile, fakeFile string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), auditFakeIPFilePrefix) {
+			fakeFile = e.Name()
+		} else if strings.HasPrefix(e.Name(), auditLogFilePrefix) {
+			normalFile = e.Name()
+		}
+	}
+	if normalFile == "" {
+		t.Fatal("未生成常规日志文件")
+	}
+	if fakeFile == "" {
+		t.Fatal("未生成 fake-ip 日志文件")
+	}
+
+	readAll := func(name string) string {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return string(b)
+	}
+	if !strings.Contains(readAll(normalFile), "normal.example.com") {
+		t.Error("常规日志缺少正常查询")
+	}
+	if strings.Contains(readAll(normalFile), "proxied.example.com") {
+		t.Error("常规日志混入了 fake-ip 查询")
+	}
+	if !strings.Contains(readAll(fakeFile), "proxied.example.com") {
+		t.Error("fake-ip 日志缺少对应查询")
+	}
+	if strings.Contains(readAll(fakeFile), "normal.example.com") {
+		t.Error("fake-ip 日志混入了常规查询")
 	}
 }
