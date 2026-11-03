@@ -687,6 +687,11 @@ type V2GetLogsParams struct {
 	Exact       bool
 	// FakeIP 为 "true" 时只返回 fake-ip 应答，"false" 时只返回非 fake-ip，空串不过滤。
 	FakeIP string
+	// 以下为仿 AGH 的精确过滤条件，空串/0 不过滤。
+	QType        string // A / AAAA / HTTPS / PTR ...
+	RCode        string // NOERROR / NXDOMAIN / SERVFAIL ...
+	DomainSet    string // 命中的规则标签，含 unmatched_rule
+	SinceMinutes int    // 只看最近 N 分钟
 }
 
 func (c *AuditCollector) CalculateV2Stats() V2StatsResponse {
@@ -940,6 +945,21 @@ func (c *AuditCollector) GetV2Logs(params V2GetLogsParams) V2PaginatedLogsRespon
 				}
 			}
 			if !found {
+				isMatched = false
+			}
+		}
+		if isMatched && params.QType != "" && !strings.EqualFold(log.QueryType, params.QType) {
+			isMatched = false
+		}
+		if isMatched && params.RCode != "" && !strings.EqualFold(log.ResponseCode, params.RCode) {
+			isMatched = false
+		}
+		if isMatched && params.DomainSet != "" && log.DomainSet != params.DomainSet {
+			isMatched = false
+		}
+		if isMatched && params.SinceMinutes > 0 {
+			cutoff := time.Now().Add(-time.Duration(params.SinceMinutes) * time.Minute)
+			if log.QueryTime.Before(cutoff) {
 				isMatched = false
 			}
 		}

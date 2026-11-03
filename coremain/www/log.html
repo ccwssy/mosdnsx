@@ -943,12 +943,50 @@
                         <button id="manage-aliases-btn-mobile" class="button secondary show-on-mobile"
                             style="display: none;"><span>管理别名</span></button>
                     </div>
-                    <div id="log-fakeip-filter-row" style="margin:0.5rem 0 0.75rem;">
-                        <select id="log-fakeip-filter" title="按应答类型过滤"
-                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;min-width:9rem;">
-                            <option value="">全部查询</option>
-                            <option value="true">只看 fake-ip</option>
-                            <option value="false">只看真实 IP</option>
+                    <div id="log-filter-row"
+                        style="display:flex;flex-wrap:wrap;gap:0.5rem;margin:0.5rem 0 0.75rem;align-items:center;">
+                        <select id="log-since-filter" class="log-filter" title="时间范围"
+                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                            <option value="">全部时间</option>
+                            <option value="5">最近 5 分钟</option>
+                            <option value="60">最近 1 小时</option>
+                            <option value="360">最近 6 小时</option>
+                            <option value="1440">最近 24 小时</option>
+                        </select>
+                        <select id="log-fakeip-filter" class="log-filter" title="应答类型"
+                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                            <option value="">全部应答</option>
+                            <option value="true">仅 fake-ip</option>
+                            <option value="false">仅真实 IP</option>
+                        </select>
+                        <select id="log-qtype-filter" class="log-filter" title="查询类型"
+                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                            <option value="">全部类型</option>
+                            <option value="A">A</option>
+                            <option value="AAAA">AAAA</option>
+                            <option value="HTTPS">HTTPS</option>
+                            <option value="CNAME">CNAME</option>
+                            <option value="PTR">PTR</option>
+                            <option value="TXT">TXT</option>
+                            <option value="MX">MX</option>
+                            <option value="SRV">SRV</option>
+                        </select>
+                        <select id="log-rcode-filter" class="log-filter" title="响应码"
+                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                            <option value="">全部状态</option>
+                            <option value="NOERROR">NOERROR</option>
+                            <option value="NXDOMAIN">NXDOMAIN</option>
+                            <option value="SERVFAIL">SERVFAIL</option>
+                            <option value="REFUSED">REFUSED</option>
+                            <option value="FORMERR">FORMERR</option>
+                        </select>
+                        <select id="log-domainset-filter" class="log-filter" title="命中规则"
+                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                            <option value="">全部规则</option>
+                        </select>
+                        <select id="log-client-filter" class="log-filter" title="客户端"
+                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                            <option value="">全部客户端</option>
                         </select>
                     </div>
                     <div id="search-results-info"></div>
