@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         overridesSaveBtn: document.getElementById('overrides-save-btn-log'),
         logTable: document.getElementById('log-table'), logTableHead: document.getElementById('log-table-head'), logTableBody: document.getElementById('log-table-body'),
         logQueryTab: document.getElementById('log-query-tab'),
-        logSearch: document.getElementById('log-search'), logQueryTableContainer: document.getElementById('log-query-table-container'), logLoader: document.getElementById('log-loader'),
+        logSearch: document.getElementById('log-search'), logFakeIP: document.getElementById('log-fakeip-filter'), logQueryTableContainer: document.getElementById('log-query-table-container'), logLoader: document.getElementById('log-loader'),
         searchResultsInfo: document.getElementById('search-results-info'),
         toast: document.getElementById('toast'),
         tooltip: document.getElementById('answers-tooltip'),

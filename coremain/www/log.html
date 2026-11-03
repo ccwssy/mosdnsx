@@ -943,6 +943,14 @@
                         <button id="manage-aliases-btn-mobile" class="button secondary show-on-mobile"
                             style="display: none;"><span>管理别名</span></button>
                     </div>
+                    <div id="log-fakeip-filter-row" style="margin:0.5rem 0 0.75rem;">
+                        <select id="log-fakeip-filter" title="按应答类型过滤"
+                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;min-width:9rem;">
+                            <option value="">全部查询</option>
+                            <option value="true">只看 fake-ip</option>
+                            <option value="false">只看真实 IP</option>
+                        </select>
+                    </div>
                     <div id="search-results-info"></div>
                     <div class="scrollable-table-container" id="log-query-table-container">
                         <table id="log-table" class="mobile-card-layout">

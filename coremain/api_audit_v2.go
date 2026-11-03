@@ -123,6 +123,7 @@ func handleV2GetLogs(w http.ResponseWriter, r *http.Request) {
 		ClientIP:    query.Get("client_ip"),
 		Q:           query.Get("q"),
 		Exact:       exactSearch,
+		FakeIP:      query.Get("fakeip"),
 	}
 
 	response := GlobalAuditCollector.GetV2Logs(params)

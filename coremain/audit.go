@@ -685,6 +685,8 @@ type V2GetLogsParams struct {
 	ClientIP    string
 	Q           string
 	Exact       bool
+	// FakeIP 为 "true" 时只返回 fake-ip 应答，"false" 时只返回非 fake-ip，空串不过滤。
+	FakeIP string
 }
 
 func (c *AuditCollector) CalculateV2Stats() V2StatsResponse {
@@ -872,6 +874,14 @@ func (c *AuditCollector) GetV2Logs(params V2GetLogsParams) V2PaginatedLogsRespon
 	for i := 0; i < totalLogs; i++ {
 		log := c.logs[curr]
 		isMatched := true
+
+		// fake-ip 过滤：三态（空=全部，true=只看 fake-ip，false=只看非 fake-ip）
+		if params.FakeIP != "" {
+			wantFake := params.FakeIP == "true" || params.FakeIP == "1"
+			if log.FakeIP != wantFake {
+				isMatched = false
+			}
+		}
 
 		if params.Q != "" {
 			foundInQ := false
