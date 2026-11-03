@@ -3,6 +3,8 @@ module github.com/IrineSistiana/mosdns/v5
 go 1.26.5
 
 require (
+	github.com/AdguardTeam/golibs v0.35.13
+	github.com/AdguardTeam/urlfilter v0.23.4
 	github.com/IrineSistiana/go-bytes-pool v0.0.0-20230918115058-c72bd9761c57
 	github.com/cilium/ebpf v0.21.0
 	github.com/go-chi/chi/v5 v5.3.0
@@ -23,7 +25,7 @@ require (
 	github.com/vishvananda/netlink v1.3.1
 	go.uber.org/zap v1.28.0
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
-	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
+	golang.org/x/exp v0.0.0-20260611194520-c48552f49976
 	golang.org/x/net v0.56.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.46.0
@@ -36,6 +38,7 @@ replace github.com/nadoo/ipset v0.5.0 => github.com/IrineSistiana/ipset v0.5.1-0
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

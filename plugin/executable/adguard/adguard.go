@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,9 +22,11 @@ import (
 
 	"github.com/IrineSistiana/mosdns/v5/coremain"
 	"github.com/IrineSistiana/mosdns/v5/pkg/matcher/domain"
+	"github.com/IrineSistiana/mosdns/v5/pkg/query_context"
 	"github.com/IrineSistiana/mosdns/v5/plugin/data_provider"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/miekg/dns"
 	"golang.org/x/net/proxy"
 )
 
@@ -32,6 +35,7 @@ const (
 	configFile        = "config.json"
 	downloadTimeout   = 30 * time.Second
 	reloadDebounceDur = 500 * time.Millisecond // 防抖延迟
+	blockTTL          = 60                     // 拦截应答 TTL（秒）
 )
 
 // 注册插件
@@ -43,6 +47,11 @@ func init() {
 type Args struct {
 	Dir    string `yaml:"dir"`
 	Socks5 string `yaml:"socks5,omitempty"` // 可选: SOCKS5 代理地址 (e.g., "127.0.0.1:1080")
+
+	// BlockMode 是命中规则后的应答方式，用于 exec 模式（exec: $tag）。
+	// 可选值：null_ip（默认，A 返回 0.0.0.0、AAAA 返回 ::）、nxdomain、refused。
+	// 作为 matcher 使用（qname $tag）时不生效，由序列内的 reject 决定。
+	BlockMode string `yaml:"block_mode,omitempty"`
 }
 
 // OnlineRule 定义了一个在线规则源的结构
@@ -83,8 +92,10 @@ type AdguardRule struct {
 	dir          string
 	configFile   string
 	onlineRules  map[string]*OnlineRule
-	allowMatcher *domain.MixMatcher[struct{}]
-	denyMatcher  *domain.MixMatcher[struct{}]
+	// engine 是 AdGuard 官方 urlfilter DNS 引擎，热重载时整体原子替换。
+	engine atomic.Pointer[filterEngine]
+	// blockMode 决定命中后返回哪种应答：null_ip（默认，0.0.0.0 / ::）、nxdomain、refused。
+	blockMode string
 	httpClient   *http.Client
 	reloadID     atomic.Uint64
 
@@ -227,8 +238,7 @@ func newAdguardRule(bp *coremain.BP, args any) (any, error) {
 		dir:          cfg.Dir,
 		configFile:   filepath.Join(cfg.Dir, configFile),
 		onlineRules:  make(map[string]*OnlineRule),
-		allowMatcher: domain.NewDomainMixMatcher(),
-		denyMatcher:  domain.NewDomainMixMatcher(),
+		blockMode:    normalizeBlockMode(cfg.BlockMode),
 		httpClient:   httpClient,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -278,20 +288,121 @@ func (p *AdguardRule) GetDomainMatcher() domain.Matcher[struct{}] {
 	return p
 }
 
-// Match 实现了 domain.Matcher 接口
+// Match 实现了 domain.Matcher 接口。
+//
+// 该路径只按域名匹配（不含 qtype 与客户端信息），供 qname $tag 这类 matcher 用法使用。
+// 需要 $dnstype / $client 精确语义时，应在序列里用 exec: $tag 走 Exec 路径。
 func (p *AdguardRule) Match(domainStr string) (value struct{}, ok bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	if _, matched := p.allowMatcher.Match(domainStr); matched {
+	eng := p.engine.Load()
+	if eng == nil {
 		return struct{}{}, false
 	}
+	return struct{}{}, eng.match(domainStr, 0, netip.Addr{}).Blocked
+}
 
-	if _, matched := p.denyMatcher.Match(domainStr); matched {
-		return struct{}{}, true
+// Exec 实现了 sequence.Executable 接口，使插件可以直接写在序列里：
+//
+//	- exec: $adguard
+//
+// 相比 matcher 用法，这里能拿到 qtype 与客户端地址，因此 $dnstype、$client、
+// $dnsrewrite 与 hosts 规则都能按 AdGuard Home 的语义生效。
+func (p *AdguardRule) Exec(_ context.Context, qCtx *query_context.Context) error {
+	eng := p.engine.Load()
+	if eng == nil || qCtx == nil {
+		return nil
 	}
 
-	return struct{}{}, false
+	q := qCtx.Q()
+	if q == nil || len(q.Question) != 1 {
+		return nil
+	}
+	question := q.Question[0]
+
+	var clientIP netip.Addr
+	if addr := qCtx.ServerMeta.RealClientAddr; addr.IsValid() {
+		clientIP = addr
+	} else if addr := qCtx.ServerMeta.ClientAddr; addr.IsValid() {
+		clientIP = addr
+	}
+
+	res := eng.match(question.Name, question.Qtype, clientIP)
+	if !res.Blocked {
+		return nil
+	}
+
+	if r := buildBlockResponse(q, question, p.blockMode, res.IPs); r != nil {
+		qCtx.SetResponse(r)
+	}
+	return nil
+}
+
+// normalizeBlockMode 归一化 block_mode 配置。
+func normalizeBlockMode(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "null_ip", "nullip", "zero":
+		return "null_ip"
+	case "nxdomain":
+		return "nxdomain"
+	case "refused":
+		return "refused"
+	default:
+		return "null_ip"
+	}
+}
+
+// buildBlockResponse 构造拦截应答，行为对齐 AdGuard Home 的 default 阻断模式。
+func buildBlockResponse(q *dns.Msg, question dns.Question, mode string, ips []netip.Addr) *dns.Msg {
+	r := new(dns.Msg)
+	r.SetReply(q)
+
+	switch mode {
+	case "nxdomain":
+		r.Rcode = dns.RcodeNameError
+		return r
+	case "refused":
+		r.Rcode = dns.RcodeRefused
+		return r
+	}
+
+	// null_ip：优先使用规则给出的地址（$dnsrewrite / hosts），否则按 qtype 回 0.0.0.0 / ::。
+	targets := ips
+	if len(targets) == 0 {
+		switch question.Qtype {
+		case dns.TypeA:
+			targets = []netip.Addr{netip.IPv4Unspecified()}
+		case dns.TypeAAAA:
+			targets = []netip.Addr{netip.IPv6Unspecified()}
+		default:
+			// 非 A/AAAA 查询返回空应答（NOERROR + 0 答案），与 AGH 一致。
+			return r
+		}
+	}
+
+	for _, addr := range targets {
+		switch {
+		case addr.Is4() && question.Qtype == dns.TypeA:
+			r.Answer = append(r.Answer, &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   question.Name,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    blockTTL,
+				},
+				A: addr.AsSlice(),
+			})
+		case addr.Is6() && question.Qtype == dns.TypeAAAA:
+			r.Answer = append(r.Answer, &dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name:   question.Name,
+					Rrtype: dns.TypeAAAA,
+					Class:  dns.ClassINET,
+					Ttl:    blockTTL,
+				},
+				AAAA: addr.AsSlice(),
+			})
+		}
+	}
+	return r
 }
 
 // loadConfig 从 config.json 加载规则列表配置
@@ -390,37 +501,28 @@ func (p *AdguardRule) reloadAllRules(ctx context.Context, initialLoad bool) {
 
 	p.updateAllRuleCounts()
 
-	// 构建新的 Matcher (用于本插件的原有功能)
-	newAllowMatcher := domain.NewDomainMixMatcher()
-	newDenyMatcher := domain.NewDomainMixMatcher()
-	totalRuleCount := 0
-
+	// 用 AdGuard 官方 urlfilter 引擎构建过滤器。
+	// 相对自写解析器，这里完整支持 $important / $badfilter / $client / $dnstype /
+	// $denyallow / 路径规则 / hosts 双列规则 / 例外规则优先级，行为对齐 AdGuard Home。
+	texts := make([]string, 0, len(enabledRules))
 	for _, rule := range enabledRules {
-		file, err := os.Open(rule.localPath)
+		data, err := os.ReadFile(rule.localPath)
 		if err != nil {
-			log.Printf("[adguard_rule] WARN: skipping enabled rule '%s', cannot open local file %s: %v", rule.Name, rule.localPath, err)
+			log.Printf("[adguard_rule] WARN: skipping enabled rule '%s', cannot read %s: %v", rule.Name, rule.localPath, err)
 			continue
 		}
-
-		// 这里传入 Matcher，保持原功能不变
-		count, err := parseRules(file, newAllowMatcher, newDenyMatcher)
-		file.Close() // 确保文件句柄被关闭
-
-		if err != nil {
-			log.Printf("[adguard_rule] ERROR: failed to parse rule file for '%s' (%s): %v", rule.Name, rule.localPath, err)
-		}
-		totalRuleCount += count
+		texts = append(texts, string(data))
 	}
 
-	p.mu.Lock()
-	p.allowMatcher = newAllowMatcher
-	p.denyMatcher = newDenyMatcher
-	p.mu.Unlock()
-
-	log.Printf("[adguard_rule] finished reloading. Total active rules from enabled lists: %d", totalRuleCount)
-	
-        newAllowMatcher = nil
-        newDenyMatcher = nil
+	eng, engErr := newFilterEngine(texts)
+	texts = nil
+	if engErr != nil {
+		// 构建失败时保留旧引擎，避免过滤能力瞬间消失。
+		log.Printf("[adguard_rule] ERROR: failed to build urlfilter engine: %v (keeping previous rules)", engErr)
+	} else {
+		p.engine.Store(eng)
+		log.Printf("[adguard_rule] finished reloading. %d rules loaded into urlfilter DNS engine", eng.rulesCount())
+	}
 
 	// [关键]: 更新完成后，通知所有订阅者 (如 domain_mapper)
 	// 因为 Add/Delete/Enable/Disable/Update 最终都会走到这里，所以都能触发通知

@@ -155,3 +155,50 @@ MosDNS 本地工作目录填入自己的mosdns配置所在目录，比如/cus/mo
 - 发布侧无需再向固定 tag 上传资产；请使用版本化标签发布即可。
 - 
 
+## adguard_rule 插件：AdGuard Home 同源过滤引擎
+
+本分支把 `adguard_rule` 的规则解析从自写的正则匹配器换成 AdGuard 官方
+[`github.com/AdguardTeam/urlfilter`](https://github.com/AdguardTeam/urlfilter) DNS 引擎——
+即 AdGuard Home 自身使用的同一个库，过滤语义与 AGH 对齐。
+
+### 解决的问题
+
+旧解析器只识别四种写法：`||domain^`、`@@||domain^`、`/regex/`、裸域名。带修饰符的规则
+（`$important`、`$badfilter`、`$client`、`$dnstype`、`$denyallow`）、路径规则、hosts 双列规则
+全部被静默丢弃。以 43 条用户规则实测：旧版只解析 10 条，导致 `@@||pv.sohu.com^$important`
+这类白名单失效（`pv.sohu.com`、`t-e.flyme.cn`、`umid.orion.meizu.com` 被误杀成 NXDOMAIN），
+`||log.mmstat.com^$important` 这类拦截规则则漏拦。
+
+新引擎在同一份规则集上加载 399965 条（旧版 291264 条），与 AGH 逐域比对 170 个样本 0 差异。
+
+### 两种用法
+
+matcher 模式（兼容旧配置，只按域名匹配，不含 qtype / `$client` 语义）：
+
+```yaml
+- matches: qname $adguard
+  exec: reject 3
+```
+
+exec 模式（推荐，能拿到 qtype 与客户端地址，`$dnstype` / `$client` / `$dnsrewrite` / hosts 全部生效）：
+
+```yaml
+- tag: adguard
+  type: adguard_rule
+  args:
+    dir: /etc/mosdns/adguard
+    block_mode: null_ip   # 可选 null_ip（默认，A→0.0.0.0、AAAA→::）| nxdomain | refused
+```
+
+```yaml
+- exec: $adguard
+- matches: has_resp
+  exec: accept
+```
+
+### 注意事项
+
+- `$important` 例外规则按域名规则本身生效：`@@||sohu.com^` 会放行全部子域，
+  只想放行单个子域要写 `@@||pv.sohu.com^`，与 AGH 完全一致。
+- 规则重载失败时保留旧引擎，不会瞬间失去过滤能力。
+- 元素隐藏规则（`##`、`#?#`、`$$`）在 DNS 层无意义，加载时跳过。
