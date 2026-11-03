@@ -28,7 +28,12 @@ jobs:
           base=$(tr -d '[:space:]' < VERSION)
           date=$(date +%Y%m%d)
           sha=$(git rev-parse --short=7 HEAD)
-          version="${base}-${date}-${sha}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # 发布构建：版本就是 tag 本身
+            version="${GITHUB_REF#refs/tags/}"
+          else
+            version="${base}-${date}-${sha}"
+          fi
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "image=${image}" >> "$GITHUB_OUTPUT"

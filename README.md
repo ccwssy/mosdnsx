@@ -233,18 +233,33 @@ exec 模式（推荐，能拿到 qtype 与客户端地址，`$dnstype` / `$clien
 
 ## 版本号约定
 
-`VERSION` 文件写「基线-补丁集」，构建时自动拼上日期与短 SHA：
+`VERSION` 文件只写「基线-补丁集」，日期与短 SHA 由构建自动拼：
 
 ```
-VERSION 内容        v5.3.4-agh1
-实际二进制版本      v5.3.4-agh1-20261103-be9fb22
-                      └基线┘ └补丁┘ └日期┘  └SHA┘
+VERSION 文件        v5.3.4-mosdnsx1.2
+日常构建版本        v5.3.4-mosdnsx1.2-20261105-1a2b3c4
+                     └基线┘ └─补丁集┘ └日期┘ └SHA┘
+发布构建（打 tag）  v5.3.4-mosdnsx1.2
 ```
 
-- **基线**：跟随上游 IrineSistiana/mosdns 的 tag，便于判断代码年代
-- **补丁集**：本分支自有特性编号，功能或行为变更时递增（`agh1` → `agh2`）
-- 日期与 SHA 由 `make build` / CI 注入，不手写
-- `make version` 可预览当前会注入的版本号
+### 补丁怎么升
+
+补丁集是普通整数编号，**没有位数上限**（`mosdnsx9`、`mosdnsx10`、`mosdnsx123` 都合法），
+分两级：
+
+| 改动类型 | 动作 | 例子 |
+|---|---|---|
+| 功能新增 / 行为变更 / 不兼容调整 | 主号 +1 | `mosdnsx1` → `mosdnsx2` |
+| 同一功能集下的小修、bugfix、文案 | 次号 +1 | `mosdnsx1` → `mosdnsx1.1` → `mosdnsx1.2` |
+| 只改文档 / CI | 可不动 VERSION | 版本靠日期+SHA 区分构建 |
+| 跟随上游基线升级 | 换基线，主号清零 | `v5.3.4-mosdnsx3` → `v5.3.5-mosdnsx1` |
+
+规则要点：
+
+- **有意义的改动都要动 VERSION**，日期+SHA 只是构建指纹，不是版本
+- 发布时 `git tag v5.3.4-mosdnsx1.1 && git push --tags`，CI 取 tag 作为正式版本号（干净、天然可排序）
+- 日常构建不带 tag，版本自带日期+SHA，同一个 VERSION 多次构建也不会撞名
+- `make version` 预览当前会注入的版本号
 
 ## 容器镜像
 
