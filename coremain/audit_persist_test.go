@@ -91,9 +91,17 @@ func TestAuditFileStoreRollBySize(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		big.Answers = append(big.Answers, AnswerDetail{Type: "A", TTL: 300, Data: "203.0.113.1"})
 	}
-	for i := 0; i < 400; i++ {
+	// 分两批落盘，第二批触发体积滚动（单批超过上限时不拆分，只让后续批次换文件）。
+	for i := 0; i < 200; i++ {
 		store.Write([]AuditLog{big})
 	}
+	time.Sleep(50 * time.Millisecond)
+	store.Flush()
+	for i := 0; i < 200; i++ {
+		store.Write([]AuditLog{big})
+	}
+	time.Sleep(50 * time.Millisecond)
+	store.Flush()
 	store.Close()
 
 	entries, err := os.ReadDir(dir)

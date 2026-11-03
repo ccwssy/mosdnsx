@@ -13,6 +13,7 @@ import (
 	"bufio"
 	"container/heap"
 	"encoding/json"
+	"io"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,12 +32,26 @@ const (
 	defaultAuditRetentionDays = 7
 	defaultAuditFileMaxMB     = 64
 	auditFileQueueSize        = 2048
+
+	// auditFlushEvery 是触发落盘的条目阈值（对齐 AGH 的 size_memory 思路）。
+	auditFlushEvery = 512
+	// auditFlushInterval 是兜底落盘间隔，保证低流量时日志也能很快出现在文件里。
+	auditFlushInterval = 2 * time.Second
+	// auditTailScanMax 是回填时最多向后扫描的字节数，避免超大文件全量读。
+	auditTailScanMax = 16 << 20
 )
 
 // AuditFileStore 负责查询日志的落盘与回填。
+//
+// 写盘策略对齐 AdGuardHome：日志先进入内存缓冲，攒够 flushEvery 条（或超过
+// flushInterval 未落盘）才做一次 open/write/close，避免高频查询时反复开关文件。
 type AuditFileStore struct {
 	ch   chan []AuditLog
 	done chan struct{}
+
+	// buf 是尚未落盘的编码结果；bufEntries 记录其中条目数。
+	buf        []byte
+	bufEntries int
 
 	mu        sync.Mutex
 	dir       string
@@ -92,6 +107,11 @@ func (s *AuditFileStore) Write(logs []AuditLog) {
 	}
 }
 
+// Flush 立即把内存缓冲落盘（优雅关闭与测试使用）。
+func (s *AuditFileStore) Flush() {
+	s.flushBuf()
+}
+
 // Close 停止后台写入并落盘残留数据。
 func (s *AuditFileStore) Close() {
 	if s == nil {
@@ -103,44 +123,83 @@ func (s *AuditFileStore) Close() {
 
 func (s *AuditFileStore) writer() {
 	defer close(s.done)
-	for batch := range s.ch {
-		s.writeBatch(batch)
+
+	ticker := time.NewTicker(auditFlushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case batch, ok := <-s.ch:
+			if !ok {
+				// 通道关闭：把残留缓冲刷掉后退出。
+				s.flushBuf()
+				return
+			}
+			s.appendBuf(batch)
+			if s.bufEntries >= auditFlushEvery {
+				s.flushBuf()
+			}
+		case <-ticker.C:
+			s.flushBuf()
+		}
 	}
 }
 
-func (s *AuditFileStore) writeBatch(logs []AuditLog) {
+// appendBuf 把一批日志编码进内存缓冲（不落盘）。
+func (s *AuditFileStore) appendBuf(logs []AuditLog) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	path, err := s.ensureFileLocked()
-	if err != nil {
-		mlog.L().Error("failed to open audit log file", zap.String("dir", s.dir), zap.Error(err))
-		return
-	}
-
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		mlog.L().Error("failed to append audit log file", zap.String("path", path), zap.Error(err))
-		return
-	}
-	defer f.Close()
-
-	w := bufio.NewWriter(f)
-	var written int64
 	for _, log := range logs {
 		b, err := json.Marshal(log)
 		if err != nil {
 			continue
 		}
-		n, _ := w.Write(b)
-		w.WriteByte('\n')
-		written += int64(n) + 1
+		s.buf = append(s.buf, b...)
+		s.buf = append(s.buf, '\n')
+		s.bufEntries++
 	}
-	if err := w.Flush(); err != nil {
-		mlog.L().Error("failed to flush audit log file", zap.String("path", path), zap.Error(err))
+}
+
+// flushBuf 把缓冲一次性写入文件。
+func (s *AuditFileStore) flushBuf() {
+	s.mu.Lock()
+	pending := s.buf
+	entries := s.bufEntries
+	s.buf = nil
+	s.bufEntries = 0
+	s.mu.Unlock()
+
+	if entries == 0 || len(pending) == 0 {
 		return
 	}
-	s.curSize += written
+
+	if err := s.appendToFile(pending); err != nil {
+		mlog.L().Error("failed to write audit log batch",
+			zap.String("dir", s.dir), zap.Int("entries", entries), zap.Error(err))
+	}
+}
+
+func (s *AuditFileStore) appendToFile(data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	path, err := s.ensureFileLocked()
+	if err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	n, err := f.Write(data)
+	if err != nil {
+		return err
+	}
+	s.curSize += int64(n)
+	return nil
 }
 
 // ensureFileLocked 返回当前写入文件路径，必要时按天或按体积滚动。
@@ -257,8 +316,22 @@ func readAuditFileTail(path string, limit int) ([]AuditLog, error) {
 	}
 	defer f.Close()
 
+	// 文件很大时只扫描尾部，避免启动回填把整个文件读一遍。
+	truncatedHead := false
+	if fi, statErr := f.Stat(); statErr == nil && fi.Size() > auditTailScanMax {
+		if _, seekErr := f.Seek(fi.Size()-auditTailScanMax, io.SeekStart); seekErr == nil {
+			truncatedHead = true
+		}
+	}
+
+	reader := bufio.NewReaderSize(f, 64*1024)
+	if truncatedHead {
+		// 丢掉被截断的首行，避免解析半条记录。必须与 scanner 共用同一个 reader。
+		_, _ = reader.ReadString('\n')
+	}
+
 	ring := make([]AuditLog, 0, limit)
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(reader)
 	// 单条日志可能较长（多答案），放宽缓冲。
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
