@@ -455,6 +455,7 @@
 
     <main class="container">
         <header class="page-header">
+            <a href="/" class="button secondary" style="text-decoration:none; padding:0.5rem 1rem;">← 返回监控</a>
             <h1>Mosdns 仪表盘</h1>
             <div class="header-main-actions">
                 <div class="nav-wrapper">
@@ -521,7 +522,7 @@
                     <input type="text" id="manual-alias-name" placeholder="输入别名" required>
                     <button type="submit" class="button primary"><span>添加</span></button>
                 </form>
-                <p>为客户端 IP 设置别名，方便在日志中快速识别。下面是最近活跃的客户端：</p>
+                <p>为客户端 IP 设置别名，方便在日志中快速识别。下面列出已保存的别名和最近活跃的客户端：</p>
                 <div id="alias-list-container"></div>
             </div>
             <footer class="modal-footer">
@@ -948,46 +949,57 @@
                         <select id="log-since-filter" class="log-filter" title="时间范围"
                             style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
                             <option value="">全部时间</option>
-                            <option value="5">最近 5 分钟</option>
                             <option value="60">最近 1 小时</option>
                             <option value="360">最近 6 小时</option>
                             <option value="1440">最近 24 小时</option>
                         </select>
-                        <select id="log-fakeip-filter" class="log-filter" title="应答类型"
-                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
-                            <option value="">全部应答</option>
-                            <option value="true">仅 fake-ip</option>
-                            <option value="false">仅真实 IP</option>
-                        </select>
-                        <select id="log-qtype-filter" class="log-filter" title="查询类型"
-                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
-                            <option value="">全部类型</option>
-                            <option value="A">A</option>
-                            <option value="AAAA">AAAA</option>
-                            <option value="HTTPS">HTTPS</option>
-                            <option value="CNAME">CNAME</option>
-                            <option value="PTR">PTR</option>
-                            <option value="TXT">TXT</option>
-                            <option value="MX">MX</option>
-                            <option value="SRV">SRV</option>
-                        </select>
-                        <select id="log-rcode-filter" class="log-filter" title="响应码"
+                        <select id="log-status-filter" class="log-filter" title="过滤状态"
                             style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
                             <option value="">全部状态</option>
-                            <option value="NOERROR">NOERROR</option>
-                            <option value="NXDOMAIN">NXDOMAIN</option>
-                            <option value="SERVFAIL">SERVFAIL</option>
-                            <option value="REFUSED">REFUSED</option>
-                            <option value="FORMERR">FORMERR</option>
-                        </select>
-                        <select id="log-domainset-filter" class="log-filter" title="命中规则"
-                            style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
-                            <option value="">全部规则</option>
+                            <option value="filtered">已过滤</option>
+                            <option value="unfiltered">未过滤</option>
                         </select>
                         <select id="log-client-filter" class="log-filter" title="客户端"
                             style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
                             <option value="">全部客户端</option>
                         </select>
+                        <details id="log-advanced-filters" class="log-filters-advanced" style="width:100%;">
+                            <summary
+                                style="cursor:pointer;font-size:0.9rem;color:var(--color-text-secondary);">高级</summary>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.5rem;align-items:center;">
+                                <select id="log-qtype-filter" class="log-filter" title="查询类型"
+                                    style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                                    <option value="">全部类型</option>
+                                    <option value="A">A</option>
+                                    <option value="AAAA">AAAA</option>
+                                    <option value="HTTPS">HTTPS</option>
+                                    <option value="CNAME">CNAME</option>
+                                    <option value="PTR">PTR</option>
+                                    <option value="TXT">TXT</option>
+                                    <option value="MX">MX</option>
+                                    <option value="SRV">SRV</option>
+                                </select>
+                                <select id="log-rcode-filter" class="log-filter" title="响应码"
+                                    style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                                    <option value="">全部响应码</option>
+                                    <option value="NOERROR">NOERROR</option>
+                                    <option value="NXDOMAIN">NXDOMAIN</option>
+                                    <option value="SERVFAIL">SERVFAIL</option>
+                                    <option value="REFUSED">REFUSED</option>
+                                    <option value="FORMERR">FORMERR</option>
+                                </select>
+                                <select id="log-fakeip-filter" class="log-filter" title="应答类型"
+                                    style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                                    <option value="">全部应答</option>
+                                    <option value="true">仅 fake-ip</option>
+                                    <option value="false">仅真实 IP</option>
+                                </select>
+                                <select id="log-domainset-filter" class="log-filter" title="命中规则"
+                                    style="padding:0.4rem 0.6rem;border-radius:0.4rem;">
+                                    <option value="">全部规则</option>
+                                </select>
+                            </div>
+                        </details>
                     </div>
                     <div id="search-results-info"></div>
                     <div class="scrollable-table-container" id="log-query-table-container">
@@ -1618,7 +1630,7 @@
         </section>
     </main>
 
-    <script src="assets/js/log.min.js" defer></script>
+    <script src="assets/js/log.js" defer></script>
 </body>
 
 </html>

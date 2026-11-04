@@ -29,3 +29,17 @@ demo/
 
 # claude knowledge base (local only)
 claude/
+
+# ── 内部产物：绝不进公开仓 ──
+AGENTS.md
+CLAUDE.md
+.cursorrules
+docs/*-prompt*.md
+docs/*-plan-*.md
+log/
+*.log
+.dsh-*
+.dispatch-dump/
+*.dump.yml
+.env
+bin/

@@ -104,6 +104,9 @@ type AuditLog struct {
 	DomainSet     string         `json:"domain_set,omitempty"`
 	// FakeIP 表示该应答来自 fake-ip 段（走代理的域名），落盘时单独成一份日志。
 	FakeIP bool `json:"fakeip,omitempty"`
+	// ClientName 是该 client_ip 对应的客户端别名，写日志时按别名表填充，查不到则为空串。
+	// 该字段为新增字段，旧日志文件里没有它，omitempty 保证旧数据仍能正常解析、无别名时不输出。
+	ClientName string `json:"client_name,omitempty"`
 }
 
 type ResponseFlags struct {
@@ -417,6 +420,12 @@ func (c *AuditCollector) processBatch(batch []*auditContext) {
 			TraceID:    qCtx.TraceID,
 		}
 
+		// 按 client_ip 查别名表填充客户端名称：clientAddr 已在上方去掉端口，LookupClientName 内部
+		// 已剥掉 ::ffff: 前缀且只取读锁，查不到返回空串，这里不再重复处理前缀、也不额外加锁。
+		if clientName := LookupClientName(clientAddr); clientName != "" {
+			log.ClientName = clientName
+		}
+
 		if val, ok := qCtx.GetValue(query_context.KeyDomainSet); ok {
 			if name, isString := val.(string); isString {
 				log.DomainSet = name
@@ -614,6 +623,27 @@ func (c *AuditCollector) GetLogs() []AuditLog {
 	return logsCopy
 }
 
+// filterLogsByDomainSet 按 domain_set 做精确的包含/剔除过滤，语义为先包含再剔除。
+//
+// 供 v1 日志接口使用：include 与 exclude 都为空时直接返回入参切片，调用方在参数为空时
+// 根本不会调用本函数，因此这里只保证不产生多余的拷贝。
+func filterLogsByDomainSet(logs []AuditLog, include, exclude string) []AuditLog {
+	if include == "" && exclude == "" {
+		return logs
+	}
+	filtered := make([]AuditLog, 0, len(logs))
+	for _, log := range logs {
+		if include != "" && log.DomainSet != include {
+			continue
+		}
+		if exclude != "" && log.DomainSet == exclude {
+			continue
+		}
+		filtered = append(filtered, log)
+	}
+	return filtered
+}
+
 func (c *AuditCollector) ClearLogs() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -692,6 +722,9 @@ type V2GetLogsParams struct {
 	RCode        string // NOERROR / NXDOMAIN / SERVFAIL ...
 	DomainSet    string // 命中的规则标签，含 unmatched_rule
 	SinceMinutes int    // 只看最近 N 分钟
+	// DomainSetExclude 是需要排除的规则标签（同样含 unmatched_rule），空串不剔除；
+	// 与 DomainSet 同时给出时语义为先包含再剔除，即命中两者的记录会被排除。
+	DomainSetExclude string
 }
 
 func (c *AuditCollector) CalculateV2Stats() V2StatsResponse {
@@ -704,9 +737,29 @@ func (c *AuditCollector) CalculateV2Stats() V2StatsResponse {
 		avgDuration = c.totalQueryDuration / float64(totalQueryCount)
 	}
 
+	// 被拦截查询数：环形缓冲中命中 adguard 规则集的记录条数。
+	// c.logs 未写满时是前缀填充，写满后靠 c.head 回绕，两种状态下下标 0..len(c.logs)-1
+	// 恰好覆盖全部有效元素且不重复，head 只影响顺序、不影响集合。
+	var blockedQueries uint64
+	for i := 0; i < len(c.logs); i++ {
+		if c.logs[i].DomainSet == "adguard" {
+			blockedQueries++
+		}
+	}
+
+	// 拦截占比：总数为 0 时直接返回 0，避免除零。
+	blockedRatio := 0.0
+	if totalQueryCount > 0 {
+		blockedRatio = float64(blockedQueries) / float64(totalQueryCount)
+	}
+
+	// 今日查询数复用 processBatch 内维护的原子计数，不读审计文件、不引入新锁。
 	return V2StatsResponse{
 		TotalQueries:      totalQueryCount,
 		AverageDurationMs: avgDuration,
+		BlockedQueries:    blockedQueries,
+		BlockedRatio:      blockedRatio,
+		TodayQueries:      c.totalQueryCountGlobal.Load(),
 	}
 }
 
@@ -782,6 +835,45 @@ func (c *AuditCollector) CalculateRank(rankType RankType, limit int) []V2RankIte
 	default:
 		return []V2RankItem{}
 	}
+}
+
+// CalculateRankFiltered 按 domain_set 精确过滤后统计排行。
+// domainSet 为空时直接委托 CalculateRank，保持原有基于增量统计 map 的快速路径；
+// 非空时在 c.mu.RLock() 下扫描环形缓冲 c.logs 聚合到临时 map，再复用 getRankFromMap 出榜。
+func (c *AuditCollector) CalculateRankFiltered(rankType RankType, domainSet string, limit int) []V2RankItem {
+	if domainSet == "" {
+		return c.CalculateRank(rankType, limit)
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// 环形缓冲语义：len(c.logs) < capVal 时是前缀填充（head 保持 0）；
+	// 写满后新记录覆盖 c.logs[c.head] 并让 head 后移回绕。
+	// 因此下标 0..len(c.logs)-1 在两种状态下都恰好覆盖全部有效元素，不重不漏，
+	// head 只决定时间顺序，聚合到 map 时无需考虑。
+	counts := make(map[string]int)
+	for i := 0; i < len(c.logs); i++ {
+		log := c.logs[i]
+		if log.DomainSet != domainSet {
+			continue
+		}
+
+		var key string
+		switch rankType {
+		case RankByDomain:
+			key = log.QueryName
+		case RankByClient:
+			key = log.ClientIP
+		case RankByDomainSet:
+			key = log.DomainSet
+		default:
+			return []V2RankItem{}
+		}
+		counts[key]++
+	}
+
+	return c.getRankFromMap(counts, limit)
 }
 
 func (c *AuditCollector) GetSlowestQueries(limit int) []AuditLog {
@@ -955,6 +1047,10 @@ func (c *AuditCollector) GetV2Logs(params V2GetLogsParams) V2PaginatedLogsRespon
 			isMatched = false
 		}
 		if isMatched && params.DomainSet != "" && log.DomainSet != params.DomainSet {
+			isMatched = false
+		}
+		// 排除过滤放在包含过滤之后，保证“先包含再剔除”的语义；参数为空时短路，不做任何额外判断。
+		if isMatched && params.DomainSetExclude != "" && log.DomainSet == params.DomainSetExclude {
 			isMatched = false
 		}
 		if isMatched && params.SinceMinutes > 0 {

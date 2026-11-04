@@ -48,7 +48,15 @@ func handleAuditStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	domainSet := query.Get("domain_set")
+	domainSetExclude := query.Get("domain_set_exclude")
+
 	logs := GlobalAuditCollector.GetLogs()
+	// 两个过滤参数都为空时保持改造前的路径：只取环形缓冲快照后直接编码，不做任何过滤遍历。
+	if domainSet != "" || domainSetExclude != "" {
+		logs = filterLogsByDomainSet(logs, domainSet, domainSetExclude)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(logs); err != nil {
 		mlog.L().Error("failed to encode audit logs to client", zap.Error(err))
@@ -82,10 +90,10 @@ func handleSetAuditCapacity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	// <<< MODIFIED: Pass the MainConfigBaseDir to the SetCapacity function >>>
 	GlobalAuditCollector.SetCapacity(req.Capacity, MainConfigBaseDir)
-	
+
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Audit log capacity set to %d. Existing logs have been cleared.", req.Capacity)
 }

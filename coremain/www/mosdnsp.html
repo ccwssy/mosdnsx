@@ -75,7 +75,7 @@
         .loading #main-content, .loading .control-panel, .loading footer { opacity: 0.5; pointer-events: none; }
         .error-message { color: var(--error-color); font-weight: bold; background-color: rgba(231, 76, 60, 0.1); border: 1px solid var(--error-color); padding: 2rem; border-radius: var(--radius-main); margin: 2rem auto; text-align:center; grid-column: 1 / -1; font-size: 1.2rem; width: fit-content; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
         .control-panel { display: grid; grid-template-columns: 2fr 1.2fr; gap: 1.2rem; align-items: stretch; width: 100%; max-width: 1800px; }
-        .control-panel:has(#tab-appearance.active), .control-panel:has(#tab-config-mgmt.active) { align-items: start; }
+        .control-panel:has(#tab-appearance.active) { align-items: start; }
         .left-column, .right-column { display: flex; flex-direction: column; gap: 1.2rem; }
         .control-section { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-main); box-shadow: var(--card-shadow); display: flex; flex-direction: column; overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; }
         .control-section:hover { box-shadow: var(--card-shadow-hover); }
@@ -112,7 +112,8 @@
         #dns-log-page-btn,
         #refresh-now-btn,
         #start-capture-btn, 
-        #get-logs-btn { 
+        #get-logs-btn,
+        #diagnose-btn { 
             background-color: var(--control-bg);
             color: var(--control-text);
             border: 1px solid var(--control-border);
@@ -133,7 +134,8 @@
         #dns-log-page-btn:hover,
         #refresh-now-btn:hover,
         #start-capture-btn:hover, 
-        #get-logs-btn:hover { 
+        #get-logs-btn:hover,
+        #diagnose-btn:hover { 
             background-color: var(--control-hover-bg);
             border-color: var(--accent-color);
             transform: translateY(-2px);
@@ -207,8 +209,6 @@
         .tab-content { display: none; flex-direction: column; gap: 1rem; height: 100%; flex-grow: 1; }
         .tab-content.active { display: flex; }
         .subsection-title { font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--label-color); margin: 1.2rem 0 0.6rem 0; display: flex; align-items: center; gap: 0.5rem;}
-        #config-mgmt-container .subsection-title { margin-top: 1.2rem; }
-        #config-mgmt-container .subsection-title:first-of-type { margin-top: 0; }
         .subsection-title:first-child { margin-top: 0; }
         .metrics-container { display: grid; grid-template-columns: auto 1fr; gap: 0.7rem 1.2rem; align-items: center; }
         .metric-item { display: contents; } 
@@ -235,27 +235,6 @@
         .blur-control .switch-label { display: flex; align-items: center; }
         .blur-control input[type="range"] { flex-grow: 1; width: 100%; }
         .mgmt-container { padding: 0; border: none; background: none; border-radius: var(--radius-main); display: flex; flex-direction: column; gap: 1.2rem; flex-grow: 1; }
-        .segmented-control { position: relative; display: flex; background-color: var(--control-bg); border-radius: var(--radius-control); padding: 0.3rem; border: 1px solid var(--control-border); }
-        .segmented-control .glider { position: absolute; top: 0.3rem; bottom: 0.3rem; width: 50%; background-color: var(--card-bg); border-radius: calc(var(--radius-control) - 0.2rem); box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
-        .segmented-control button { flex: 1; padding: 0.7rem; border: none; background-color: transparent; color: var(--control-text); font-weight: 600; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.6rem; z-index: 1; }
-        .segmented-control button.active { color: var(--accent-color); }
-        .segmented-control.loading { pointer-events: none; opacity: 0.6; }
-        .secondary-switches-list { display: flex; flex-direction: column; gap: 0.6rem; }
-        .switch-card { display: grid; background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-main); padding: 0.8rem 1.2rem; grid-template-columns: auto 1fr auto; align-items: center; gap: 1.2rem; }
-        .switch-card .icon-area { font-size: 1.1rem; color: var(--label-color); width: 1.5em; text-align: center; }
-        .switch-card .switch-content h4 { margin: 0 0 0.1rem 0; color: var(--value-color); font-size: 1.0rem; display: flex; align-items: center; gap: 0.5rem; }
-        .switch-card .switch-content p { margin: 0; color: var(--label-color); font-size: 0.85rem; }
-        .switch-card .switch-control { position: relative; }
-        .switch-card .apple-switch-input { display: none; }
-        .switch-card .apple-switch-slider { position: relative; display: inline-block; width: 40px; height: 22px; background-color: var(--control-border); transition: .4s; border-radius: 22px; cursor: pointer; }
-        .switch-card .apple-switch-slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        .switch-card .apple-switch-input:checked + .apple-switch-slider { background-color: var(--status-green); }
-        .switch-card .apple-switch-input:focus + .apple-switch-slider { box-shadow: 0 0 1px var(--status-green); }
-        .switch-card .apple-switch-input:checked + .apple-switch-slider:before { transform: translateX(18px); }
-        .switch-card.loading .apple-switch-slider { opacity: 0.5; }
-        .switch-card .mini-loader { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 20px; height: 20px; border: 2px solid var(--control-border); border-top-color: var(--accent-color); border-radius: 50%; animation: spin 0.8s linear infinite; }
-        .switch-card.loading .mini-loader { display: block; }
-        .switch-card.loading .apple-switch-slider:before { display: none; }
         
         .list-mgmt-layout { display: flex; height: 100%; width: 100%; flex-grow: 1; }
         .list-submenu { flex: 0 0 90px; border-right: 1px solid var(--border-color); overflow-y: auto; padding: 1rem 0; display: flex; flex-direction: column; }
@@ -729,8 +708,6 @@
             #appearance-container .subsection-title { margin-bottom: 0.5rem; }
             #appearance-container .theme-selector, #appearance-container .card-toggle-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.8rem; }
             
-            .switch-card { grid-template-columns: auto 1fr auto; align-items: center; gap: 0 1.2rem; padding: 1rem 1.2rem; }
-            .switch-card .switch-control { grid-column: auto; justify-self: auto; margin-top: 0; }
 
             .list-mgmt-layout { flex-direction: column; } 
             .list-submenu { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; gap: 0.5rem; border-right: none; border-bottom: 1px solid var(--border-color); margin: 0; padding: 0.8rem 0; } 
@@ -803,8 +780,7 @@
                     <!-- MODIFICATION END -->
 
                     <div class="rule-actions-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                        <div class="button-group-inline"><button id="save-rules-btn" class="btn"><i class="fas fa-save"></i> 保存分流规则</button><button id="flush-cache-btn" class="btn"><i class="fas fa-broom"></i> 清空全部缓存</button></div>
-                        <div class="button-group-inline" style="margin-top:0.8rem"><button id="flush-rules-btn" class="btn danger"><i class="fas fa-trash-alt"></i> 清空分流规则</button><button id="restart-mosdns-btn" class="btn danger"><i class="fas fa-redo"></i> 重启 MosDNS</button></div>
+                        <div class="button-group-inline"><button id="flush-cache-btn" class="btn"><i class="fas fa-broom"></i> 清空全部缓存</button><button id="restart-mosdns-btn" class="btn danger"><i class="fas fa-redo"></i> 重启 MosDNS</button></div>
                     </div>
 
                     <!-- 覆盖配置：socks5 与 ECS -->
@@ -836,14 +812,63 @@
                     <div class="data-view-group" id="data-view-buttons"></div>
                 </div>
             </section>
+            <!-- 拦截 TOP10：/api/v2/audit/rank/domain?domain_set=adguard&limit=10 -->
+            <section class="control-section">
+                <div class="control-section-body">
+                    <h4 class="section-title"><i class="fas fa-ban"></i> 拦截 TOP10</h4>
+                    <div id="adguard-top10-table"></div>
+                </div>
+            </section>
+            <section class="control-section">
+                <div class="control-section-body">
+                    <h4 class="section-title"><i class="fas fa-stethoscope"></i> DNS 诊断</h4>
+                    <!-- DNS 诊断：请求 /api/v1/diagnose 后以键值表展示结果 -->
+                    <div class="control-group" style="gap: .6rem; flex-wrap: wrap;">
+                        <input type="text" id="diagnose-name" placeholder="example.com" style="width: 220px; height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0.6rem 0.9rem;" />
+                        <select id="diagnose-type" style="height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0 .6rem;">
+                            <option value="A">A</option>
+                            <option value="AAAA">AAAA</option>
+                        </select>
+                        <button id="diagnose-btn" class="btn"><i class="fas fa-vial"></i> 测试</button>
+                    </div>
+                    <div class="metrics-container" id="diagnose-result" style="margin-top: 1rem;">
+                        <div class="metric-label"><i class="fas fa-crosshairs"></i> <span>命中规则:</span></div>
+                        <div class="metric-value" id="diagnose-domain-set">-</div>
+                        <div class="metric-label"><i class="fas fa-stopwatch"></i> <span>耗时:</span></div>
+                        <div class="metric-value" id="diagnose-duration">-</div>
+                        <div class="metric-label"><i class="fas fa-reply"></i> <span>应答:</span></div>
+                        <div class="metric-value" id="diagnose-answers" style="white-space: pre-line;">-</div>
+                        <div class="metric-label"><i class="fas fa-user-secret"></i> <span>是否 fake-ip:</span></div>
+                        <div class="metric-value" id="diagnose-fakeip">-</div>
+                        <div class="metric-label"><i class="fas fa-signal"></i> <span>rcode:</span></div>
+                        <div class="metric-value" id="diagnose-rcode">-</div>
+                    </div>
+                </div>
+            </section>
         </div>
         <div class="right-column">
+            <!-- 广告过滤总开关：紧贴系统信息区，状态一律以 /plugins/adguard/enabled 的服务端返回为准 -->
+            <section class="control-section" style="flex-grow: 0; padding: 1.2rem;">
+                <h4 class="section-title"><i class="fas fa-shield-alt"></i> 广告过滤</h4>
+                <div class="control-group" style="align-items: center; gap: .8rem; flex-wrap: wrap;">
+                    <label for="adguard-enabled-toggle" class="auto-refresh-control">
+                        <span class="switch-label-text" id="adguard-state-text">广告过滤: 读取中…</span>
+                        <input type="checkbox" id="adguard-enabled-toggle" class="generic-switch-input">
+                        <span class="generic-switch-slider"></span>
+                    </label>
+                    <span class="hint" style="color: var(--label-color);">切换后回读服务端状态</span>
+                </div>
+            </section>
+            <!-- 今日统计：/api/v2/audit/stats 的今日查询 / 拦截 / 拦截率三行键值 -->
+            <section class="control-section" style="flex-grow: 0; padding: 1.2rem;">
+                <h4 class="section-title"><i class="fas fa-chart-pie"></i> 今日统计</h4>
+                <div class="metrics-container" id="metrics-today-stats"></div>
+            </section>
              <section class="control-section">
                 <div class="control-section-header">
                     <div class="info-panel-tabs">
                         <button class="tab-button active" data-tab="system-info"><i class="fas fa-server"></i> 系统信息</button>
                         <button class="tab-button" data-tab="appearance"><i class="fas fa-palette"></i> 外观设置</button>
-                        <button class="tab-button" data-tab="config-mgmt"><i class="fas fa-toggle-on"></i> 功能开关</button>
                         <button class="tab-button" data-tab="list-mgmt"><i class="fas fa-list-alt"></i> 名单管理</button>
                     </div>
                 </div>
@@ -872,9 +897,6 @@
                             <h5 class="subsection-title">显示缓存卡片</h5>
                             <div class="card-toggle-group" id="card-toggles"></div>
                         </div>
-                    </div>
-                    <div id="tab-config-mgmt" class="tab-content">
-                        <div id="config-mgmt-container" class="mgmt-container"></div>
                     </div>
                     <div id="tab-list-mgmt" class="tab-content">
                         <div id="list-mgmt-container" class="mgmt-container"></div>
@@ -983,7 +1005,7 @@
         let isRefreshing = false; 
         let currentTheme = 'light';
         let coreMode = 'A';
-        let isMgmtTabInitialized = { config: false, list: false };
+        let isMgmtTabInitialized = { list: false };
 
         let currentModalData = { type: null, rawEntries: [], filteredEntries: [], totalCount: 0, loadTime: 0 };
         let dataModalSearchInput = null;
@@ -997,15 +1019,6 @@
             '打开文件描述符': 'fa-folder-open'
         };
 
-        const switchProfiles = [
-            { tag: 'switch3', name: '核心运行模式', tip: '切换后将清空自动生成的分流规则，确保完全按照新模式分流（兼容/安全模式理论上分流效果无差异）。兼容模式性能更高，安全模式防泄露和劫持能力更强。', modes: { 'A': { name: '兼容模式', icon: 'fa-globe-americas' }, 'B': { name: '安全模式', icon: 'fa-shield-alt' }}},
-            { tag: 'switch1', name: '请求屏蔽开关', desc: '对无解析结果的请求进行屏蔽', tip: '建议开启，避免无ipv4及ipv6结果的非必要DNS解析。', icon: 'fa-ban', valueForOn: 'A' },
-            { tag: 'switch5', name: '类型屏蔽开关', desc: '屏蔽 SOA、PTR、HTTPS 等请求类型', tip: '建议开启，可减少不必要的网络请求，提高效率。', icon: 'fa-ban', valueForOn: 'A' },
-            { tag: 'switch6', name: 'IPV6屏蔽开关', desc: '屏蔽AAAA请求类型', tip: '无IPV6网络环境建议开启', icon: 'fa-ban', valueForOn: 'A' },
-            { tag: 'switch2', name: '指定 Client 开关', desc: '对特定客户端 IP 应用分流策略', tip: '按需开启。需要 MosDNS 监听53端口，并正确配置 client_ip 名单。', icon: 'fa-user-secret', valueForOn: 'A' },
-            { tag: 'switch4', name: '过期缓存开关', desc: '启用 Lazy Cache（乐观缓存）', tip: '建议开启，可以提升重复查询的响应速度，即使缓存已过期。', icon: 'fa-history', valueForOn: 'A' },
-            { tag: 'switch7', name: '广告屏蔽开关', desc: '启用Adguard广告屏蔽在线规则支持', tip: '此开关开启后，勾选的在线列表才会生效。', icon: 'fa-history', valueForOn: 'A' },
-        ];
         
         const ipSetProfiles = [ 
             { tag: 'client_ip', name: '客户端 IP (IPSet)', icon: 'fa-network-wired' } 
@@ -1017,17 +1030,6 @@
             { tag: 'ddnslist', name: 'DDNS 域名', icon: 'fa-sync-alt' },
         ];
         const hostsProfiles = [];
-        let ruleListPaths = [];
-        // 分流规则清空/保存只作用于用户在 data/rule 下自建的名单，避免误伤自动下载的 geosite。
-        async function getManagedListTags() {
-            try {
-                const r = await fetch('/api/v1/lists');
-                if (!r.ok) return [];
-                const arr = await r.json();
-                return arr.filter(x => x.editable && x.managed).map(x => x.tag);
-            } catch (e) { return []; }
-        }
-        getManagedListTags().then(tags => { ruleListPaths = tags.map(t => `${t}/flush`); });
 
         function createElement(tag, className, innerText = '', id = '') { const el = D.createElement(tag); if (className) el.className = className; if (innerText) el.innerText = innerText; if (id) el.id = id; return el; }
         function formatNumber(num) { if (typeof num !== 'number' && isNaN(num = parseFloat(num))) { return num; } return num.toLocaleString('en-US'); }
@@ -1230,7 +1232,10 @@
             updateMetrics('metrics-system', [{ label: '启动时间', value: data.system.start_time }, { label: 'CPU 时间', value: data.system.cpu_time }, { label: '常驻内存 (RSS)', value: data.system.resident_memory }, { label: '系统累计接收流量', value: data.system.net_recv }, { label: '系统累计发送流量', value: data.system.net_send }, { label: 'GC 次数', value: data.system.gc_count }, { label: 'GC 累计耗时', value: data.system.gc_sum }, { label: '上次 GC 时间', value: data.system.last_gc_time }, { label: 'Go 版本', value: data.system.go_version, accent: true }, { label: '线程数', numericValue: data.system.threads }, { label: '打开文件描述符', numericValue: data.system.open_fds }, ]);
             const lastUpdatedEl = getById('last_updated');
             if(lastUpdatedEl) lastUpdatedEl.innerHTML = `<i class="fas fa-clock"></i> 最后更新: ${new Date().toLocaleTimeString()}`;
-            
+
+            // 首页监控区（广告过滤开关 / 今日统计 / 拦截 TOP10）跟随既有刷新流程一起更新
+            await refreshPanelInsights();
+
             initializeTooltips();
         }
         
@@ -1327,119 +1332,47 @@
             }
         }
 
-        async function initializeSwitchManagementTab() {
-            const container = getById('config-mgmt-container');
-            container.innerHTML = '<div id="loading-spinner" style="display: block; margin: 2rem auto;"></div>';
-            isMgmtTabInitialized.config = false;
+        // DNS 诊断：请求 /api/v1/diagnose 并展示结果
+        const diagnoseFields = ['diagnose-domain-set', 'diagnose-duration', 'diagnose-answers', 'diagnose-fakeip', 'diagnose-rcode'];
+        function setDiagnoseResult(values) {
+            diagnoseFields.forEach(id => {
+                const el = getById(id);
+                if (el) el.textContent = values[id] === undefined ? '-' : values[id];
+            });
+        }
+        async function runDnsDiagnose() {
+            const nameInput = getById('diagnose-name');
+            const name = (nameInput.value || '').trim();
+            const qtype = getById('diagnose-type').value;
+            if (!name) {
+                showToast('请输入要诊断的域名', 'error');
+                nameInput.focus();
+                return;
+            }
+            setDiagnoseResult({});
+            getById('diagnose-duration').textContent = '诊断中...';
             try {
-                await updateCoreModeStatus();
-                const fetchPromises = switchProfiles.map(p => fetch(`/plugins/${p.tag}/show`));
-                const results = await Promise.allSettled(fetchPromises);
-                
-                const statuses = {};
-                for (let i = 0; i < results.length; i++) {
-                    const result = results[i];
-                    const profile = switchProfiles[i];
-                    if (result.status === 'fulfilled' && result.value.ok) {
-                        statuses[profile.tag] = (await result.value.text()).trim();
-                    } else {
-                        const reason = result.reason ? result.reason.message : (result.value ? `HTTP ${result.value.status}` : 'Unknown Error');
-                        console.error(`获取 ${profile.tag} 状态失败:`, reason);
-                        statuses[profile.tag] = 'error';
-                    }
+                const url = '/api/v1/diagnose?name=' + encodeURIComponent(name) + '&type=' + encodeURIComponent(qtype);
+                const res = await fetch(url);
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(errorText || ('诊断请求失败，状态码: ' + res.status));
                 }
-                
-                container.innerHTML = ''; 
-                const masterProfile = switchProfiles.find(p => p.modes);
-                if (masterProfile) {
-                    const masterCard = createElement('div', 'master-switch-card');
-                    const currentState = statuses[masterProfile.tag];
-                    const titleHTML = `<h5 class="subsection-title"><i class="fas fa-satellite-dish"></i> <span>${masterProfile.name}</span>${masterProfile.tip ? `<i class="fas fa-info-circle info-tooltip-icon" data-tooltip="${masterProfile.tip}"></i>` : ''}</h5>`;
-                    
-                    masterCard.innerHTML = titleHTML + 
-                        (currentState === 'error' ? `<p class="error-message" style="padding:0;background:none;border:none;text-align:center;color:var(--error-color);">获取状态失败</p>` :
-                        `<div class="segmented-control">
-                            <div class="glider" style="transform: translateX(${currentState === 'A' ? '0%' : '100%'});"></div>
-                            ${Object.entries(masterProfile.modes).map(([val, {name, icon}]) => `<button class="${currentState===val?'active':''}" data-value="${val}" data-switch-tag="${masterProfile.tag}"><i class="fas ${icon}"></i> ${name}</button>`).join('')}
-                        </div>`);
-                    if (currentState !== 'error') masterCard.querySelectorAll('.segmented-control button').forEach(btn => { btn.onclick = () => handleMasterSwitch(btn); });
-                    container.appendChild(masterCard);
-                }
-
-                const secondaryContainer = createElement('div', 'secondary-switches-list');
-                
-                switchProfiles.filter(p => !p.modes).forEach(profile => {
-                    const card = createElement('div', 'switch-card', '', `switch-card-${profile.tag}`);
-                    const currentState = statuses[profile.tag];
-                    const isChecked = currentState === profile.valueForOn;
-                    const switchId = `switch-input-${profile.tag}`;
-                    const titleHTML = `<h4><span>${profile.name}</span>${profile.tip ? `<i class="fas fa-info-circle info-tooltip-icon" data-tooltip="${profile.tip}"></i>` : ''}</h4>`;
-                    
-                    card.innerHTML = currentState === 'error' ? `<i class="icon-area fas ${profile.icon}"></i><div class="switch-content">${titleHTML}<p style="color:var(--error-color);">获取状态失败</p></div>`
-                        : `<i class="icon-area fas ${profile.icon}"></i>
-                        <div class="switch-content">${titleHTML}<p>${profile.desc}</p></div>
-                        <div class="switch-control">
-                            <input type="checkbox" id="${switchId}" class="apple-switch-input" data-switch-tag="${profile.tag}" ${isChecked ? 'checked' : ''}>
-                            <label for="${switchId}" class="apple-switch-slider"></label>
-                            <div class="mini-loader"></div>
-                        </div>`;
-                    if(currentState !== 'error') card.querySelector('input[type="checkbox"]').onchange = (e) => handleSecondarySwitch(e.target);
-                    secondaryContainer.appendChild(card);
+                const data = await res.json();
+                const answers = Array.isArray(data.answers) ? data.answers : [];
+                setDiagnoseResult({
+                    'diagnose-domain-set': data.domain_set || '未命中',
+                    'diagnose-duration': (data.duration_ms === undefined || data.duration_ms === null) ? '-' : (String(data.duration_ms) + ' ms'),
+                    'diagnose-answers': answers.length ? answers.join('\n') : '无应答',
+                    'diagnose-fakeip': data.is_fakeip ? '是' : '否',
+                    'diagnose-rcode': data.rcode || '-'
                 });
-                if (secondaryContainer.children.length > 0) container.appendChild(secondaryContainer);
-                isMgmtTabInitialized.config = true;
-                
-                initializeTooltips();
-            } catch (error) {
-                console.error("Switch tab initialization error:", error);
-                container.innerHTML = `<div class="error-message" style="margin: 0;"><p>加载开关状态时发生意外错误</p><small>${error.message}</small></div>`;
+            } catch (e) {
+                setDiagnoseResult({});
+                showToast('DNS 诊断请求失败', 'error');
+                showErrorModal(e.message || '诊断请求失败');
             }
         }
-        
-        async function handleMasterSwitch(button) {
-            if (button.classList.contains('active')) return;
-            const tag = button.dataset.switchTag, valueToPost = button.dataset.value, control = button.parentElement;
-            control.classList.add('loading');
-            try {
-                await postApi(`/plugins/${tag}/post`, { value: valueToPost });
-                coreMode = valueToPost; 
-                try {
-                    const requests = ruleListPaths.map(path => fetch(`/plugins/${path}`));
-                    await Promise.all(requests.map(async p => {
-                        const res = await p;
-                        if (!res.ok) throw new Error(`清空规则失败于: ${res.url} (${res.status})`);
-                    }));
-                    showToast('核心模式切换成功，已自动清空分流规则。');
-                } catch(flushError) {
-                    console.error("自动清空分流规则失败:", flushError);
-                    showToast(`核心模式已切换，但自动清空分流规则失败。`, 'error');
-                }
-
-                await refreshData(true, true);
-            } catch (error) {
-                showToast(`切换核心模式失败！`, 'error');
-                showErrorModal(error.message);
-            } finally {
-                await initializeSwitchManagementTab();
-            }
-        }
-
-        async function handleSecondarySwitch(checkbox) {
-            const tag = checkbox.dataset.switchTag;
-            const card = getById(`switch-card-${tag}`); card.classList.add('loading'); checkbox.disabled = true;
-            const profile = switchProfiles.find(p => p.tag === tag);
-            const valueToPost = checkbox.checked ? profile.valueForOn : (profile.valueForOn === 'A' ? 'B' : 'A');
-            try {
-                await postApi(`/plugins/${tag}/post`, { value: valueToPost });
-                showToast(`“${profile.name}” 已${checkbox.checked ? '启用' : '禁用'}`);
-            } catch (error) {
-                showToast(`切换 "${profile.name}" 失败`, 'error');
-                showErrorModal(e.message);
-            } finally {
-                await initializeSwitchManagementTab();
-            }
-        }
-
         async function initializeListManagementTab() {
             const container = getById('list-mgmt-container');
             container.innerHTML = '<div id="loading-spinner" style="display: block; margin: 2rem auto;"></div>';
@@ -1576,31 +1509,6 @@
                     tooltipEl.classList.remove('active');
                 };
             });
-        }
-        
-        async function saveAllRulesAndNotify() {
-            try {
-                const tags = await getManagedListTags();
-                if (!tags.length) { showToast('没有可保存的自建名单', 'error'); return false; }
-                const paths = tags.map(t => `${t}/save`);
-                showToast('正在保存分流规则...');
-                const requests = paths.map(p => fetch(`/plugins/${p}`));
-                
-                await Promise.all(requests.map(async p => {
-                    const res = await p;
-                    if (!res.ok) {
-                        const errorText = await res.text();
-                        throw new Error(`保存规则失败于 ${res.url}: ${errorText || res.statusText}`);
-                    }
-                }));
-
-                showToast('分流规则已成功保存。', 'success');
-                return true; 
-            } catch (e) {
-                showToast('保存分流规则时发生错误！', 'error');
-                showErrorModal(e.message);
-                return false; 
-            }
         }
         
         function renderTableData(entries) {
@@ -1878,32 +1786,14 @@
             const autoRefreshToggle = getById('auto-refresh-toggle');
             autoRefreshToggle.onchange = (e) => { const isEnabled = e.target.checked; localStorage.setItem('autoRefresh', isEnabled); if (isEnabled) { if (!autoRefreshTimer) autoRefreshTimer = setInterval(() => refreshData(false, true), REFRESH_INTERVAL); } else if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; } };
 
-            const createApiAction = (btnId, paths, msg, successMsg) => {
-                getById(btnId).addEventListener('click', async () => {
-                    if (msg && !confirm(msg)) return;
-                    try {
-                        const requests = paths.map(p => fetch(`/plugins/${p}`));
-                        await Promise.all(requests.map(async p => {
-                            const res = await p;
-                            if (!res.ok) throw new Error(`操作失败于: ${res.url} (${res.status})`);
-                        }));
-                        showToast(successMsg);
-                    } catch (e) {
-                        showToast('操作失败', 'error');
-                        showErrorModal(e.message);
-                    }
-                });
-            };
-            getById('save-rules-btn').addEventListener('click', () => { if (confirm('确定保存所有分流规则吗?')) { saveAllRulesAndNotify(); } });
-            createApiAction('flush-rules-btn', ruleListPaths, '【危险操作】确定清空所有分流规则吗?', '分流规则已清空。');
             getById('flush-cache-btn').addEventListener('click', async () => { if (!confirm('确定清空全部缓存吗? 此操作将根据当前核心运行模式清空对应的缓存。')) { return; } const cacheToFlush = 'cache'; const path = `/plugins/${cacheToFlush}/flush`; try { const response = await fetch(path); if (!response.ok) { const errorText = await response.text(); throw new Error(`清空缓存失败于 ${path}: ${errorText || response.statusText}`); } showToast('全部缓存已清空，正在刷新数据...', 'success'); await refreshData(false, true); } catch (e) { showToast('清空缓存操作失败！', 'error'); showErrorModal(e.message); } });
-            getById('restart-mosdns-btn').onclick = async () => { if (confirm('【危险操作】此操作将首先保存所有分流规则，然后重启 MosDNS。确定要继续吗?')) { const saveSuccess = await saveAllRulesAndNotify(); if (saveSuccess) { showToast('规则已保存，正在发送重启命令...', 'success'); try { const response = await fetch('/api/v1/system/restart', { method: 'POST' }); if (!response.ok) { const errorText = await response.text(); throw new Error(errorText || `重启命令请求失败，状态码: ${response.status}`); } showToast('MosDNS 正在重启，页面即将刷新...'); setTimeout(() => location.reload(), 2000); } catch (e) { showToast('重启命令发送失败', 'error'); showErrorModal(e.message); } } else { showToast('由于规则保存失败，重启操作已取消。', 'error'); } } };getById('dns-log-page-btn').onclick = () => { window.open(`${window.location.origin}/log`, '_blank'); };
+            getById('restart-mosdns-btn').onclick = async () => { if (confirm('【危险操作】此操作将重启 MosDNS。确定要继续吗?')) { try { const response = await fetch('/api/v1/system/restart', { method: 'POST' }); if (!response.ok) { const errorText = await response.text(); throw new Error(errorText || `重启命令请求失败，状态码: ${response.status}`); } showToast('MosDNS 正在重启，页面即将刷新...'); setTimeout(() => location.reload(), 2000); } catch (e) { showToast('重启命令发送失败', 'error'); showErrorModal(e.message); } } };getById('dns-log-page-btn').onclick = () => { window.open(`${window.location.origin}/log`, '_blank'); };
             
             renderDataViewButtons();
             
             const tabButtons = D.querySelectorAll('.tab-button');
             const tabContents = D.querySelectorAll('.control-section-body .tab-content');
-            tabButtons.forEach(button => { button.addEventListener('click', () => { tabButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active'); const targetTabId = `tab-${button.dataset.tab}`; tabContents.forEach(content => content.classList.toggle('active', content.id === targetTabId)); if (button.dataset.tab === 'config-mgmt' && !isMgmtTabInitialized.config) initializeSwitchManagementTab(); if (button.dataset.tab === 'list-mgmt' && !isMgmtTabInitialized.list) initializeListManagementTab(); }); });
+            tabButtons.forEach(button => { button.addEventListener('click', () => { tabButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active'); const targetTabId = `tab-${button.dataset.tab}`; tabContents.forEach(content => content.classList.toggle('active', content.id === targetTabId)); if (button.dataset.tab === 'list-mgmt' && !isMgmtTabInitialized.list) initializeListManagementTab(); }); });
             
             getById('set-bg-btn').onclick = () => { const url = prompt('请输入背景图片的 URL 或本地绝对路径:', localStorage.getItem('customBackgroundUrl') || ''); if(url !== null) setBackgroundImage(url); };
             getById('remove-bg-btn').onclick = () => { if(confirm('确定移除自定义背景吗?')) setBackgroundImage(''); };
@@ -1913,6 +1803,10 @@
             const pSaveBtn = getById('p-overrides-save-btn');
             if (pLoadBtn) pLoadBtn.onclick = () => pLoadOverridesToForm().then(() => showToast('已读取当前覆盖配置'));
             if (pSaveBtn) pSaveBtn.onclick = () => pSaveOverridesFromForm();
+            const diagnoseBtn = getById('diagnose-btn');
+            if (diagnoseBtn) diagnoseBtn.onclick = runDnsDiagnose;
+            const diagnoseNameInput = getById('diagnose-name');
+            if (diagnoseNameInput) diagnoseNameInput.onkeydown = (e) => { if (e.key === 'Enter') runDnsDiagnose(); };
             
             const blurToggle = getById('blur-toggle'); const blurSlider = getById('blur-slider');
             const setBlur = (value) => D.documentElement.style.setProperty('--glass-blur-strength', `${value}px`);
@@ -2166,6 +2060,171 @@
             container.appendChild(list);
         }
 
+        // --- 广告过滤总开关 / 今日统计 / 拦截 TOP10 BEGIN ---
+        // 按服务端返回值渲染开关：状态字段只写「开 / 关」，不出现 Enabled/Boolean 这类工具字
+        function renderAdguardState(enabled) {
+            const toggle = getById('adguard-enabled-toggle');
+            const text = getById('adguard-state-text');
+            if (toggle) toggle.checked = !!enabled;
+            if (!text) return;
+            text.innerText = '广告过滤: ' + (enabled ? '开' : '关');
+            text.style.fontWeight = '';
+            text.style.color = enabled ? 'var(--status-green)' : 'var(--label-color)';
+        }
+
+        // 状态不可信时整行标红；勾选保持上一次已确认的值，不跟着失败一起改
+        function markAdguardStateError(message) {
+            const text = getById('adguard-state-text');
+            if (!text) return;
+            text.innerText = message;
+            text.style.fontWeight = '700';
+            text.style.color = 'var(--error-color)';
+        }
+
+        // 只取服务端状态，供启动读取与切换后的回读校验共用
+        async function fetchAdguardEnabled() {
+            const res = await fetch('/plugins/adguard/enabled');
+            if (!res.ok) throw new Error('读取广告过滤状态失败: HTTP ' + res.status);
+            const data = await res.json();
+            return !!data.enabled;
+        }
+
+        // 读取广告过滤总开关状态，界面一律以服务端返回值为准
+        async function loadAdguardEnabled() {
+            if (!getById('adguard-enabled-toggle')) return;
+            try {
+                renderAdguardState(await fetchAdguardEnabled());
+            } catch (e) {
+                markAdguardStateError('广告过滤: 状态未知');
+            }
+        }
+
+        // 切换广告过滤总开关：先 POST，再立刻 GET 回读校验，界面以服务端状态为准
+        async function setAdguardEnabled(enabled) {
+            const toggle = getById('adguard-enabled-toggle');
+            if (toggle) toggle.disabled = true;
+            let postFailed = false;
+            try {
+                const res = await fetch('/plugins/adguard/enabled', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: enabled }) });
+                if (!res.ok) throw new Error('切换广告过滤失败: HTTP ' + res.status);
+            } catch (e) {
+                postFailed = true;
+                showToast('切换广告过滤失败', 'error');
+                showErrorModal(e.message);
+            }
+            // 无论成功还是失败都回读一次服务端状态，避免开关与后端不一致
+            let actual = null;
+            try { actual = await fetchAdguardEnabled(); } catch (e) { actual = null; }
+            if (actual === null) {
+                markAdguardStateError('广告过滤: 回读校验失败');
+                showToast('广告过滤状态校验失败', 'error');
+            } else if (postFailed) {
+                renderAdguardState(actual);
+                markAdguardStateError('广告过滤: ' + (actual ? '开' : '关') + '（切换失败）');
+            } else if (actual !== enabled) {
+                // POST 返回成功但回读状态没变：按失败标红，不假装切换成功
+                renderAdguardState(actual);
+                markAdguardStateError('广告过滤: ' + (actual ? '开' : '关') + '（未生效）');
+                showToast('广告过滤切换未生效', 'error');
+            } else {
+                // 只有回读校验通过才提示成功
+                renderAdguardState(actual);
+                showToast('广告过滤已' + (enabled ? '开启' : '关闭'), 'success');
+            }
+            if (toggle) toggle.disabled = false;
+        }
+
+        // 今日统计：today_queries / blocked_queries / blocked_ratio（0~1 浮点按百分比展示）
+        async function loadTodayStats() {
+            const container = getById('metrics-today-stats');
+            if (!container) return;
+            try {
+                const res = await fetch('/api/v2/audit/stats');
+                if (!res.ok) throw new Error('读取今日统计失败: ' + res.status);
+                const data = await res.json();
+                const ratio = typeof data.blocked_ratio === 'number' ? data.blocked_ratio : 0;
+                const rows = [
+                    { icon: 'fa-search', label: '今日查询', value: formatNumber(data.today_queries || 0) },
+                    { icon: 'fa-ban', label: '拦截', value: formatNumber(data.blocked_queries || 0) },
+                    { icon: 'fa-percent', label: '拦截率', value: (ratio * 100).toFixed(1) + '%', accent: true }
+                ];
+                container.innerHTML = '';
+                rows.forEach(function (m) {
+                    const labelEl = createElement('div', 'metric-label');
+                    labelEl.innerHTML = '<i class="fas ' + m.icon + '"></i> <span>' + m.label + ':</span>';
+                    const valueEl = createElement('div', 'metric-value' + (m.accent ? ' accent' : ''));
+                    valueEl.innerText = m.value;
+                    container.append(labelEl, valueEl);
+                });
+            } catch (e) {
+                container.innerHTML = '<div class="metric-label"><i class="fas fa-exclamation-triangle"></i> <span>今日统计:</span></div><div class="metric-value">获取失败</div>';
+            }
+        }
+
+        // 拦截 TOP10：接口返回 [{key,count}]，key 为域名，count 为请求数（字段定义见 coremain/api_audit_v2.go 的 V2RankItem）
+        async function loadAdguardTop10() {
+            const wrapper = getById('adguard-top10-table');
+            if (!wrapper) return;
+            try {
+                const res = await fetch('/api/v2/audit/rank/domain?domain_set=adguard&limit=10');
+                if (!res.ok) throw new Error('读取拦截排行失败: ' + res.status);
+                const rows = await res.json();
+                const list = Array.isArray(rows) ? rows : [];
+                wrapper.innerHTML = '';
+                if (list.length === 0) {
+                    const empty = createElement('p', '', '暂无拦截记录');
+                    empty.style.color = 'var(--label-color)';
+                    empty.style.fontSize = '.9rem';
+                    wrapper.appendChild(empty);
+                    return;
+                }
+                const table = D.createElement('table');
+                table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: .9rem;';
+                const thead = D.createElement('thead');
+                const headRow = D.createElement('tr');
+                ['域名', '请求数'].forEach(function (title, i) {
+                    const th = D.createElement('th');
+                    th.innerText = title;
+                    th.style.cssText = 'text-align: ' + (i === 1 ? 'right' : 'left') + '; padding: .35rem .4rem; border-bottom: 1px solid var(--border-color);';
+                    headRow.appendChild(th);
+                });
+                thead.appendChild(headRow);
+                const tbody = D.createElement('tbody');
+                list.forEach(function (item) {
+                    const tr = D.createElement('tr');
+                    const tdKey = D.createElement('td');
+                    // 域名用 textContent 写入，避免把日志内容当 HTML 解析
+                    tdKey.textContent = String(item.key === null || item.key === undefined ? '' : item.key);
+                    tdKey.style.cssText = 'padding: .35rem .4rem; word-break: break-all;';
+                    const tdCount = D.createElement('td');
+                    tdCount.innerText = formatNumber(item.count || 0);
+                    tdCount.style.cssText = 'padding: .35rem .4rem; text-align: right;';
+                    tr.append(tdKey, tdCount);
+                    tbody.appendChild(tr);
+                });
+                table.append(thead, tbody);
+                wrapper.appendChild(table);
+            } catch (e) {
+                wrapper.innerHTML = '';
+                const fail = createElement('p', '', '拦截排行获取失败');
+                fail.style.color = 'var(--label-color)';
+                fail.style.fontSize = '.9rem';
+                wrapper.appendChild(fail);
+            }
+        }
+
+        // 首页监控区统一刷新入口，已接入 refreshData 的加载与定时刷新流程
+        async function refreshPanelInsights() {
+            const toggle = getById('adguard-enabled-toggle');
+            if (toggle && !toggle.dataset.panelBound) {
+                // 只在首次挂载时绑定一次，避免每次刷新重复绑定
+                toggle.dataset.panelBound = '1';
+                toggle.onchange = function (e) { setAdguardEnabled(e.target.checked); };
+            }
+            await Promise.all([loadAdguardEnabled(), loadTodayStats(), loadAdguardTop10()]);
+        }
+        // --- 广告过滤总开关 / 今日统计 / 拦截 TOP10 END ---
+
         // --- END OF REVISED LOG RENDERING LOGIC ---
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -2188,7 +2247,6 @@
             const activeTabButton = D.querySelector('.tab-button.active');
             if (activeTabButton) {
                 const tabName = activeTabButton.dataset.tab;
-                if (tabName === 'config-mgmt') await initializeSwitchManagementTab();
                 if (tabName === 'list-mgmt') await initializeListManagementTab();
             }
 

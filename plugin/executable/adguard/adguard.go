@@ -33,6 +33,9 @@ import (
 const (
 	PluginType        = "adguard_rule"
 	configFile        = "config.json"
+	enabledStateFile  = "enabled.state" // 过滤总开关状态文件名
+	enabledStateOn    = "on"
+	enabledStateOff   = "off"
 	downloadTimeout   = 30 * time.Second
 	reloadDebounceDur = 500 * time.Millisecond // 防抖延迟
 	blockTTL          = 60                     // 拦截应答 TTL（秒）
@@ -87,17 +90,19 @@ func (rule *OnlineRule) MarshalJSON() ([]byte, error) {
 
 // AdguardRule 是插件的主结构体
 type AdguardRule struct {
-	mu           sync.RWMutex
-	reloadMu     sync.Mutex
-	dir          string
-	configFile   string
-	onlineRules  map[string]*OnlineRule
+	mu          sync.RWMutex
+	reloadMu    sync.Mutex
+	dir         string
+	configFile  string
+	onlineRules map[string]*OnlineRule
 	// engine 是 AdGuard 官方 urlfilter DNS 引擎，热重载时整体原子替换。
 	engine atomic.Pointer[filterEngine]
 	// blockMode 决定命中后返回哪种应答：null_ip（默认，0.0.0.0 / ::）、nxdomain、refused。
-	blockMode string
-	httpClient   *http.Client
-	reloadID     atomic.Uint64
+	blockMode  string
+	httpClient *http.Client
+	reloadID   atomic.Uint64
+	// enabled 是过滤总开关，关闭时 Exec 直接放行，不查询引擎。
+	enabled atomic.Bool
 
 	// 用于优雅关闭
 	ctx    context.Context
@@ -109,7 +114,7 @@ type AdguardRule struct {
 }
 
 // 确保实现了必要的接口
-var _ data_provider.RuleExporter = (*AdguardRule)(nil)        // 新增接口
+var _ data_provider.RuleExporter = (*AdguardRule)(nil)          // 新增接口
 var _ data_provider.DomainMatcherProvider = (*AdguardRule)(nil) // 原有接口
 
 // RuleReceiver 接口用于解耦解析和存储逻辑，使 parseRules 既能用于构建 Matcher 也能用于导出
@@ -183,13 +188,13 @@ func (p *AdguardRule) notifySubscribers() {
 		go cb()
 	}
 
-    // 新增：给订阅者一点时间完成它们的重载工作，然后统一回收
-    if len(subs) > 0 {
-        time.AfterFunc(time.Second*5, func() {
-            log.Println("[adguard_rule] post-notification GC triggered")
-            coremain.ManualGC()
-        })
-    }
+	// 新增：给订阅者一点时间完成它们的重载工作，然后统一回收
+	if len(subs) > 0 {
+		time.AfterFunc(time.Second*5, func() {
+			log.Println("[adguard_rule] post-notification GC triggered")
+			coremain.ManualGC()
+		})
+	}
 }
 
 // newAdguardRule 是插件的初始化函数
@@ -235,14 +240,20 @@ func newAdguardRule(bp *coremain.BP, args any) (any, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	p := &AdguardRule{
-		dir:          cfg.Dir,
-		configFile:   filepath.Join(cfg.Dir, configFile),
-		onlineRules:  make(map[string]*OnlineRule),
-		blockMode:    normalizeBlockMode(cfg.BlockMode),
-		httpClient:   httpClient,
-		ctx:          ctx,
-		cancel:       cancel,
-		subscribers:  make([]func(), 0),
+		dir:         cfg.Dir,
+		configFile:  filepath.Join(cfg.Dir, configFile),
+		onlineRules: make(map[string]*OnlineRule),
+		blockMode:   normalizeBlockMode(cfg.BlockMode),
+		httpClient:  httpClient,
+		ctx:         ctx,
+		cancel:      cancel,
+		subscribers: make([]func(), 0),
+	}
+
+	// 过滤总开关状态在构造时读取：本插件没有 Init() 方法，等价的初始化就在此处完成。
+	p.enabled.Store(loadEnabledState(cfg.Dir))
+	if !p.enabled.Load() {
+		log.Println("[adguard_rule] filtering is disabled by enabled.state")
 	}
 
 	if err := p.loadConfig(); err != nil {
@@ -302,11 +313,16 @@ func (p *AdguardRule) Match(domainStr string) (value struct{}, ok bool) {
 
 // Exec 实现了 sequence.Executable 接口，使插件可以直接写在序列里：
 //
-//	- exec: $adguard
+//   - exec: $adguard
 //
 // 相比 matcher 用法，这里能拿到 qtype 与客户端地址，因此 $dnstype、$client、
 // $dnsrewrite 与 hosts 规则都能按 AdGuard Home 的语义生效。
 func (p *AdguardRule) Exec(_ context.Context, qCtx *query_context.Context) error {
+	// 过滤总开关关闭时直接放行，不查询引擎
+	if !p.enabled.Load() {
+		return nil
+	}
+
 	eng := p.engine.Load()
 	if eng == nil || qCtx == nil {
 		return nil
@@ -530,12 +546,13 @@ func (p *AdguardRule) reloadAllRules(ctx context.Context, initialLoad bool) {
 	// [关键]: 更新完成后，通知所有订阅者 (如 domain_mapper)
 	// 因为 Add/Delete/Enable/Disable/Update 最终都会走到这里，所以都能触发通知
 	p.notifySubscribers()
-        coremain.ManualGC()
+	coremain.ManualGC()
 }
 
 type counterCollector struct {
 	count int
 }
+
 func (c *counterCollector) Add(_ string, _ struct{}) error {
 	c.count++
 	return nil
@@ -556,12 +573,12 @@ func (p *AdguardRule) updateAllRuleCounts() {
 			}
 			continue
 		}
-		
+
 		// --- 关键修改开始 ---
 		// 使用计数器代替真实的 Matcher。
 		// 这样 parseRules 在运行过程中不会构建复杂的 Trie 树和正则对象
 		counter := &counterCollector{}
-		count, _ := parseRules(file, counter, counter) 
+		count, _ := parseRules(file, counter, counter)
 		file.Close()
 		// --- 关键修改结束 ---
 
@@ -803,6 +820,40 @@ func (p *AdguardRule) getRulesForAutoUpdate() []*OnlineRule {
 	return rulesToUpdate
 }
 
+// loadEnabledState 读取过滤总开关状态文件，返回当前是否开启过滤。
+// 只有去掉首尾空白后内容为 off 时才关闭；文件不存在、读取失败或其他内容一律保持开启。
+func loadEnabledState(dir string) bool {
+	path := filepath.Join(dir, enabledStateFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("[adguard_rule] failed to read state file %s: %v. filtering stays enabled.", path, err)
+		}
+		return true
+	}
+	if strings.TrimSpace(string(data)) == enabledStateOff {
+		return false
+	}
+	return true
+}
+
+// saveEnabledState 原子写入过滤总开关状态：先写临时文件再重命名，避免留下半截文件。
+func saveEnabledState(dir string, enabled bool) error {
+	state := enabledStateOn
+	if !enabled {
+		state = enabledStateOff
+	}
+	path := filepath.Join(dir, enabledStateFile)
+	tmpFile := path + ".tmp"
+	if err := os.WriteFile(tmpFile, []byte(state), 0644); err != nil {
+		return fmt.Errorf("failed to write temporary state file: %w", err)
+	}
+	if err := os.Rename(tmpFile, path); err != nil {
+		return fmt.Errorf("failed to rename temporary state file to final: %w", err)
+	}
+	return nil
+}
+
 // --- API 处理器 ---
 
 // jsonError 是一个辅助函数
@@ -979,12 +1030,46 @@ func (p *AdguardRule) api() *chi.Mux {
 			log.Println("[adguard_rule] Manual update process finished.")
 			// 更新完成触发 reload (进而触发 notify)
 			p.triggerReload(p.ctx)
-			coremain.ManualGC() 
+			coremain.ManualGC()
 		}()
 
 		w.WriteHeader(http.StatusAccepted)
 		fmt.Fprintln(w, "Update process for enabled rules has been started in the background.")
 	}))
+
+	// 过滤总开关：GET 返回当前内存状态
+	r.Get("/enabled", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"enabled": p.enabled.Load()})
+	})
+
+	// 过滤总开关：POST 先把状态写入 enabled.state 并落盘成功，再改内存状态
+	r.Post("/enabled", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonError(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// 写文件失败时直接返回 500，保持内存状态不变
+		if err := saveEnabledState(p.dir, req.Enabled); err != nil {
+			log.Printf("[adguard_rule] ERROR: failed to save filtering state: %v", err)
+			jsonError(w, "Failed to save filtering state", http.StatusInternalServerError)
+			return
+		}
+
+		p.enabled.Store(req.Enabled)
+		if req.Enabled {
+			log.Println("[adguard_rule] filtering enabled by API")
+		} else {
+			log.Println("[adguard_rule] filtering disabled by API")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"enabled": req.Enabled})
+	})
 
 	return r
 }

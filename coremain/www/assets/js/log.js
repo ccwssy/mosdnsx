@@ -188,12 +188,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return ip;
     };
 
-    const clientnameApi = {
-        get: () => api.fetch(`/plugins/clientname`),
-        update: (data) => api.fetch(`/plugins/clientname`, {
-            method: 'PUT',
+    // 客户端别名 API：对接后端 coremain/api_aliases.go 的 /api/v1/aliases 接口
+    const aliasesApi = {
+        // 读取整张别名表：{ "192.168.2.18": "Nova14U" }
+        get: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/aliases/`),
+        // 写入单条别名；name 传空字符串时后端按删除处理
+        set: (ip, name) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/aliases/`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
+            body: JSON.stringify({ ip, name }),
+        }),
+        // 删除单条别名；后端幂等，记录不存在也返回成功
+        remove: (ip) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/aliases/${encodeURIComponent(ip)}`, {
+            method: 'DELETE',
         }),
     };
 
@@ -1134,9 +1141,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     const aliasManager = {
+        // 相对上次加载的别名快照，save() 只提交相对快照有变化的条目
+        savedAliases: {},
         async load() {
             try {
-                const aliases = await clientnameApi.get();
+                const aliases = await aliasesApi.get();
                 const normalizedAliases = {};
                 if (typeof aliases === 'object' && aliases !== null) {
                     for (const ip in aliases) {
@@ -1144,23 +1153,40 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 state.clientAliases = normalizedAliases;
+                this.savedAliases = { ...normalizedAliases };
             } catch (error) {
                 ui.showToast('加载客户端别名失败', 'error');
                 state.clientAliases = {};
+                this.savedAliases = {};
             }
         },
+        // 增量保存：后端没有批量接口，只对有变化的条目逐条 POST /api/v1/aliases/
         async save() {
-            try {
-                await clientnameApi.update(state.clientAliases);
-            } catch (error) {
-                throw error;
+            const changedIps = [];
+            for (const ip in state.clientAliases) {
+                if (state.clientAliases[ip] !== this.savedAliases[ip]) changedIps.push(ip);
+            }
+            for (const ip of changedIps) {
+                await aliasesApi.set(ip, state.clientAliases[ip]);
+                this.savedAliases[ip] = state.clientAliases[ip];
             }
         },
-        getDisplayName: (ip) => {
-            const normalizedIp = normalizeIP(ip);
-            return state.clientAliases[normalizedIp] || ip;
+        // 取客户端展示名：优先日志记录里的 client_name，其次前端别名表，最后回退纯 IP
+        getDisplayName: (ip, clientName) => {
+            const name = typeof clientName === 'string' ? clientName.trim() : '';
+            if (name) return name;
+            return state.clientAliases[normalizeIP(ip)] || ip;
         },
-        getAliasedClientHTML: (ip) => {
+        // 客户端纯文本标签：有 client_name 时输出「名字 (IP)」，否则沿用别名表或纯 IP
+        getClientLabel: (ip, clientName) => {
+            const name = typeof clientName === 'string' ? clientName.trim() : '';
+            if (name) return `${name} (${ip})`;
+            return state.clientAliases[normalizeIP(ip)] || ip;
+        },
+        // 「客户端」列 HTML：有 client_name 时输出「名字 (IP)」，否则沿用别名表渲染
+        getAliasedClientHTML: (ip, clientName) => {
+            const name = typeof clientName === 'string' ? clientName.trim() : '';
+            if (name) return `<span class="client-alias" title="IP: ${ip}">${name} (${ip})</span>`;
             const normalizedIp = normalizeIP(ip);
             return state.clientAliases[normalizedIp] ? `<span class="client-alias" title="IP: ${ip}">${state.clientAliases[normalizedIp]}</span>` : ip;
         },
@@ -1169,38 +1195,53 @@ document.addEventListener('DOMContentLoaded', () => {
             const normalizedIp = normalizeIP(ip);
             if (name) { state.clientAliases[normalizedIp] = name; } else { delete state.clientAliases[normalizedIp]; }
         },
+        // 逐条提交列表里被改动过的输入：非空走 POST，清空走 DELETE
         async saveAll() {
             const aliasItems = elements.aliasListContainer.querySelectorAll('.alias-item');
-            let changed = false;
+            const changes = [];
             aliasItems.forEach(item => {
                 const ip = item.dataset.ip;
                 const input = item.querySelector('input');
                 const newValue = input.value.trim();
                 const originalValue = input.dataset.originalValue;
-                if (newValue !== originalValue) {
-                    this.set(ip, newValue);
-                    changed = true;
-                }
+                if (newValue !== originalValue) changes.push([ip, newValue]);
             });
-            if (changed) {
-                try {
-                    await this.save();
-                    ui.showToast('所有别名更改已保存', 'success');
-                    await updatePageData(false);
-                    await this.renderEditableList();
-                } catch (error) {
-                    ui.showToast('保存别名失败', 'error');
-                }
-            } else {
+            if (changes.length === 0) {
                 ui.showToast('没有检测到任何更改');
+                return;
+            }
+            try {
+                for (const [ip, name] of changes) {
+                    if (name) {
+                        await aliasesApi.set(ip, name);
+                    } else {
+                        await aliasesApi.remove(ip);
+                    }
+                    this.set(ip, name);
+                }
+                ui.showToast('所有别名更改已保存', 'success');
+                await updatePageData(false);
+                await this.renderEditableList();
+            } catch (error) {
+                ui.showToast('保存别名失败', 'error');
             }
         },
         async renderEditableList() {
             if (!elements.aliasListContainer) return;
             elements.aliasListContainer.innerHTML = '<p>正在加载客户端列表...</p>';
             try {
-                const topClients = await api.v2.getTopClients(null, 200);
-                const uniqueIps = [...new Set(topClients.map(client => client.key))].sort();
+                // 打开弹窗先 GET 整张别名表，保证列表展示服务器最新状态
+                await this.load();
+                // 活跃客户端只用于补充「尚未设别名」的候选行，取不到时仍要展示已保存的别名
+                let topClients = [];
+                try {
+                    topClients = await api.v2.getTopClients(null, 200);
+                } catch (error) {
+                    console.error('加载活跃客户端列表失败:', error);
+                }
+                const ipSet = new Set(topClients.map(client => client.key).filter(Boolean));
+                Object.keys(state.clientAliases).forEach(ip => ipSet.add(ip));
+                const uniqueIps = [...ipSet].sort();
                 if (uniqueIps.length === 0) {
                     elements.aliasListContainer.innerHTML = '<p>日志中暂无客户端 IP 记录。</p>';
                     return;
@@ -1212,17 +1253,60 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.dataset.ip = ip;
                     const normalizedIp = normalizeIP(ip);
                     const currentAlias = state.clientAliases[normalizedIp] || '';
-                    item.innerHTML = `<span style="font-weight:600;">${ip}</span> <input type="text" placeholder="设置别名..." value="${currentAlias}" data-original-value="${currentAlias}">`;
+                    const ipLabel = document.createElement('span');
+                    ipLabel.style.fontWeight = '600';
+                    ipLabel.textContent = ip;
+                    // 输入框与删除按钮放在同一格：既保持两列布局，也避免别名里的引号破坏属性
+                    const editor = document.createElement('div');
+                    editor.style.cssText = 'display:flex;gap:0.5rem;align-items:center;';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.placeholder = '设置别名...';
+                    input.value = currentAlias;
+                    input.dataset.originalValue = currentAlias;
+                    input.style.flex = '1';
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.type = 'button';
+                    deleteBtn.className = 'button secondary';
+                    deleteBtn.textContent = '删除';
+                    deleteBtn.dataset.deleteIp = ip;
+                    deleteBtn.style.flexShrink = '0';
+                    editor.append(input, deleteBtn);
+                    item.append(ipLabel, editor);
                     elements.aliasListContainer.appendChild(item);
                 });
+                this.bindDeleteHandler();
             } catch (error) {
                 elements.aliasListContainer.innerHTML = '<p>加载客户端列表失败。</p>';
             }
         },
+        // 删除按钮用容器事件委托，覆盖式赋值保证重复渲染不会叠加监听
+        bindDeleteHandler() {
+            if (!elements.aliasListContainer) return;
+            elements.aliasListContainer.onclick = async (e) => {
+                const btn = e.target.closest('[data-delete-ip]');
+                if (!btn) return;
+                const ip = btn.dataset.deleteIp;
+                btn.disabled = true;
+                try {
+                    await aliasesApi.remove(ip);
+                    this.set(ip, '');
+                    delete this.savedAliases[normalizeIP(ip)];
+                    btn.closest('.alias-item')?.remove();
+                    ui.showToast(`已删除别名: ${ip}`, 'success');
+                    await updatePageData(false);
+                } catch (error) {
+                    btn.disabled = false;
+                    ui.showToast('删除别名失败', 'error');
+                }
+            };
+        },
+        // 导出：把服务器上的整张别名表下载为 JSON 文件
         async export() {
             try {
                 ui.showToast('正在从服务器获取最新配置...');
-                const aliasesToExport = await clientnameApi.get();
+                // 导出语义是「整表」：从后端重新 GET 完整别名单
+                const aliasesToExport = await aliasesApi.get();
                 const normalizedAliases = {};
                 if (typeof aliasesToExport === 'object' && aliasesToExport !== null) {
                     for (const ip in aliasesToExport) {
@@ -1251,13 +1335,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const newAliases = JSON.parse(e.target.result);
                     if (typeof newAliases !== 'object' || newAliases === null || Array.isArray(newAliases)) throw new Error('无效的JSON对象格式');
 
-                    for (const ip in newAliases) {
-                        this.set(ip, newAliases[ip]);
-                    }
-
                     ui.showToast('正在上传配置到服务器...');
-                    await this.save();
-
+                    // 导入语义是「整表」：后端无批量接口，对表里每个 IP 逐条 POST 写入
+                    for (const ip in newAliases) {
+                        const name = typeof newAliases[ip] === 'string' ? newAliases[ip].trim() : '';
+                        await aliasesApi.set(ip, name);
+                        this.set(ip, name);
+                    }
+                    await this.load();
                     await this.renderEditableList();
                     await updatePageData(false);
                     ui.showToast('配置已成功导入并上传', 'success');
@@ -1720,6 +1805,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let logRequestController;
+
+    // 读取筛选下拉框当前值；元素缺失时返回空串，避免页面结构差异导致取值报错
+    function readLogFilterValue(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+
+    // 绑定筛选下拉的变更事件，并按延迟统计接口回填「客户端」「命中规则」下拉的选项（仅在初始化时执行一次）
+    function initLogFilters() {
+        document.querySelectorAll('.log-filter').forEach(el => el.addEventListener('change', () => fetchAndRenderLogs(1, false)));
+        const fillOptions = (id, url) => {
+            const select = document.getElementById(id);
+            if (!select) return;
+            fetch(url).then(res => (res.ok ? res.json() : [])).then(list => {
+                if (!Array.isArray(list)) return;
+                list.slice(0, 25).forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.key;
+                    option.textContent = `${item.key} (${item.count})`;
+                    select.appendChild(option);
+                });
+            }).catch(() => { });
+        };
+        fillOptions('log-client-filter', '/api/v2/audit/rank/client');
+        fillOptions('log-domainset-filter', '/api/v2/audit/rank/domain_set');
+    }
+
     async function fetchAndRenderLogs(page = 1, append = false) {
         if (state.isLogLoading && !append) return;
         state.isLogLoading = true;
@@ -1727,7 +1836,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!append) renderSkeletonRows(elements.logTableBody, Math.min(20, CONSTANTS.LOGS_PER_PAGE), state.isMobile ? 1 : 5);
         if (!append && logRequestController) logRequestController.abort();
         logRequestController = new AbortController();
-        const params = { page, limit: CONSTANTS.LOGS_PER_PAGE, q: state.currentLogSearchTerm.query, exact: state.currentLogSearchTerm.exact };
+        const params = { page, limit: CONSTANTS.LOGS_PER_PAGE, q: state.currentLogSearchTerm.query, exact: state.currentLogSearchTerm.exact, fakeip: readLogFilterValue('log-fakeip-filter'), since: readLogFilterValue('log-since-filter'), qtype: readLogFilterValue('log-qtype-filter'), rcode: readLogFilterValue('log-rcode-filter'), domain_set: readLogFilterValue('log-domainset-filter'), client_ip: readLogFilterValue('log-client-filter') };
+        // 「状态」筛选复用 domain_set 语义：已过滤固定为 adguard；未过滤改用排除参数，两者互斥、不同时下发
+        const logStatusFilter = readLogFilterValue('log-status-filter');
+        if (logStatusFilter === 'filtered') { params.domain_set = 'adguard'; }
+        else if (logStatusFilter === 'unfiltered') { params.domain_set_exclude = 'adguard'; }
         try {
             const response = await api.v2.getLogs(logRequestController.signal, params);
             if (!response?.pagination) throw new Error("Invalid response from logs API");
@@ -1905,7 +2018,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const { ra, aa, tc } = data.response_flags || {}; const flagItems = [ra && 'RA', aa && 'AA', tc && 'TC'].filter(Boolean);
         queryInfo['域名'] = createInteractiveLine(data.query_name, data.query_name, data.query_name, false);
         queryInfo['时间'] = `<span>${formatDate(data.query_time)}</span>`;
-        queryInfo['客户端'] = createInteractiveLine(aliasManager.getDisplayName(data.client_ip) + ` (${data.client_ip})`, data.client_ip, data.client_ip, true);
+        queryInfo['客户端'] = createInteractiveLine(aliasManager.getDisplayName(data.client_ip, data.client_name) + ` (${data.client_ip})`, data.client_ip, data.client_ip, true);
         queryInfo['类型'] = `<span>${data.query_type || 'N/A'}</span>`;
         if (data.query_class) queryInfo['类别'] = `<span>${data.query_class}</span>`;
         if (data.domain_set) queryInfo['分流规则'] = createInteractiveLine(data.domain_set, data.domain_set, data.domain_set, true);
@@ -1946,7 +2059,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="domain" title="${log.query_name}">${log.query_name}</div>
                         <div class="time">${formatRelativeTime(log.query_time)}</div>
                         <div class="meta">
-                            <span class="client">${aliasManager.getDisplayName(log.client_ip)}</span>
+                            <span class="client">${aliasManager.getClientLabel(log.client_ip, log.client_name)}</span>
                             <span class="duration">${log.duration_ms.toFixed(0)}ms</span>
                             ${getResponseTagHTML(log)}
                             ${getRuleTagHTML(log)}
@@ -1959,7 +2072,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${renderDomainResponseCellHTML(log)}</td>
                 <td>${log.query_type}</td>
                 <td class="text-center numeric duration-cell">${log.duration_ms.toFixed(2)}</td>
-                <td>${aliasManager.getAliasedClientHTML(log.client_ip)}</td>`;
+                <td>${aliasManager.getAliasedClientHTML(log.client_ip, log.client_name)}</td>`;
         }
         return tr;
     }
@@ -1973,7 +2086,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="domain" title="${log.query_name}">${log.query_name}</div>
                         <div class="time">${formatRelativeTime(log.query_time)}</div>
                         <div class="meta">
-                            <span class="client">${aliasManager.getDisplayName(log.client_ip)}</span>
+                            <span class="client">${aliasManager.getClientLabel(log.client_ip, log.client_name)}</span>
                             <span class="duration">${log.duration_ms.toFixed(0)}ms</span>
                             ${getResponseTagHTML(log)}
                             ${getRuleTagHTML(log)}
@@ -1983,7 +2096,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             tr.innerHTML = `
                 <td>${renderDomainResponseCellHTML(log, 'slowest')}</td>
-                <td>${aliasManager.getAliasedClientHTML(log.client_ip)}</td>
+                <td>${aliasManager.getAliasedClientHTML(log.client_ip, log.client_name)}</td>
                 <td class="text-right numeric duration-cell">${log.duration_ms.toFixed(2)}</td>`;
         }
         return tr;
@@ -1996,7 +2109,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const { ra, aa, tc } = data.response_flags || {}; const flagItems = [ra && 'RA', aa && 'AA', tc && 'TC'].filter(Boolean);
             queryInfo['完整域名'] = createInteractiveLine(data.query_name, data.query_name, data.query_name, false, true);
             queryInfo['精确时间'] = `<small>${formatDate(data.query_time)}</small>`;
-            queryInfo['客户端'] = createInteractiveLine(aliasManager.getDisplayName(data.client_ip), data.client_ip, data.client_ip, true, true);
+            queryInfo['客户端'] = createInteractiveLine(aliasManager.getDisplayName(data.client_ip, data.client_name), data.client_ip, data.client_ip, true, true);
             queryInfo['类型'] = `<small>${data.query_type || 'N/A'}</small>`;
             if (data.query_class) queryInfo['类别'] = `<small>${data.query_class}</small>`;
             if (data.domain_set) queryInfo['规则'] = createInteractiveLine(data.domain_set, data.domain_set, data.domain_set, true, true);
@@ -2627,7 +2740,9 @@ const cacheManager = {
     const listManager = {
         MAX_LINES: 10000,
         currentTag: null,
-        profiles: [
+        // FALLBACK_PROFILES 是兜底名单：/api/v1/lists 请求失败、返回非数组或空数组时回退到这里，
+        // 保证左侧 nav 不会空白、页面照常可用；正常情况下一律使用接口返回的 tag/name。
+        FALLBACK_PROFILES: [
             { tag: 'whitelist', name: '白名单' },
             { tag: 'blocklist', name: '黑名单' },
             { tag: 'greylist', name: '灰名单' },
@@ -2639,6 +2754,10 @@ const cacheManager = {
             { tag: 'nft_ip', name: 'NFT IP' },
             { tag: 'rewrite', name: '重定向' }
         ],
+        // profiles 是当前生效的名单条目（接口返回优先，失败时为兜底名单）；editable 为 false 的条目只读。
+        profiles: [],
+        // readonlyHint 是懒创建的只读提示节点：log.html 里没有对应元素，改由脚本生成。
+        readonlyHint: null,
 
         init() {
             if (state.listManagerInitialized) return;
@@ -2650,14 +2769,92 @@ const cacheManager = {
                 }
             });
             elements.listSaveBtn.addEventListener('click', () => this.saveList());
-            // 首屏不立即加载巨大列表，交给空闲时机/用户点击触发，避免刷新时卡顿
-            if ('requestIdleCallback' in window) requestIdleCallback(() => this.loadList('whitelist'), { timeout: 2000 });
-            else setTimeout(() => this.loadList('whitelist'), 1200);
+            // 先用兜底名单渲染 nav 占位，再异步拉取真实名单覆盖，保证左侧栏不会长时间空白
+            this.renderNav(this.FALLBACK_PROFILES);
+            this.initNav();
             state.listManagerInitialized = true;
+        },
+
+        // initNav 拉取 /api/v1/lists，用后端返回的 tag/name 重建左侧 nav。
+        // 请求失败、返回非数组或空数组时保留兜底名单，不抛出异常、不影响页面其它功能。
+        async initNav() {
+            let items = [];
+            try {
+                const res = await fetch('/api/v1/lists');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data)) {
+                        items = data
+                            .filter(item => item && typeof item.tag === 'string' && item.tag)
+                            .map(item => ({
+                                tag: item.tag,
+                                name: item.name || item.tag,
+                                editable: item.editable !== false
+                            }));
+                    }
+                }
+            } catch (error) {
+                // 接口不可用时静默回退，只留控制台痕迹，不弹窗打扰用户
+                console.warn('获取名单列表失败，已回退到内置兜底名单:', error);
+                items = [];
+            }
+            if (items.length > 0) this.renderNav(items);
+            // nav 就绪后再按首项 tag 走原有 loadList；首屏仍交给空闲时机，避免刷新时卡顿
+            const firstTag = this.profiles.length > 0 ? this.profiles[0].tag : 'whitelist';
+            const startLoad = () => this.loadList(firstTag);
+            if ('requestIdleCallback' in window) requestIdleCallback(startLoad, { timeout: 2000 });
+            else setTimeout(startLoad, 1200);
+        },
+
+        // renderNav 用条目数组重建左侧 nav：链接标记仍为 .list-mgmt-link + data-list-tag，
+        // 因此 init 里既有的点击委托与 loadList 的 active 切换逻辑无需改动。
+        renderNav(items) {
+            this.profiles = items;
+            elements.listMgmtNav.innerHTML = '';
+            const activeTag = (this.currentTag && items.some(item => item.tag === this.currentTag))
+                ? this.currentTag
+                : (items.length > 0 ? items[0].tag : '');
+            items.forEach(item => {
+                const link = document.createElement('a');
+                link.href = '#';
+                link.className = 'list-mgmt-link';
+                link.dataset.listTag = item.tag;
+                link.textContent = item.name || item.tag;
+                if (item.tag === activeTag) link.classList.add('active');
+                elements.listMgmtNav.appendChild(link);
+            });
+        },
+
+        // applyListEditable 按条目的 editable 切换文本框只读与保存按钮禁用，并显示/隐藏只读提示。
+        // 条目不存在（兜底名单不带 editable 字段）时按可编辑处理，保持改造前的行为。
+        applyListEditable(tag) {
+            const profile = this.profiles.find(item => item.tag === tag);
+            const editable = !profile || profile.editable !== false;
+            elements.listContentTextArea.readOnly = !editable;
+            elements.listSaveBtn.disabled = !editable;
+            const hint = this.ensureReadonlyHint();
+            if (hint) hint.style.display = editable ? 'none' : 'block';
+        },
+
+        // ensureReadonlyHint 懒创建只读提示段落并插到文本框之前；容器缺失时返回 null。
+        ensureReadonlyHint() {
+            if (this.readonlyHint && this.readonlyHint.parentNode) return this.readonlyHint;
+            const textarea = elements.listContentTextArea;
+            const container = textarea ? textarea.parentNode : null;
+            if (!container) return null;
+            const hint = document.createElement('p');
+            hint.id = 'list-mgmt-readonly-hint';
+            hint.style.cssText = 'display: none; font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.75rem;';
+            hint.textContent = '此类名单请在『在线分流』里维护';
+            container.insertBefore(hint, textarea);
+            this.readonlyHint = hint;
+            return hint;
         },
 
         async loadList(tag) {
             this.currentTag = tag;
+            // 先按条目的 editable 锁定输入框与保存按钮，避免只读名单在加载期间仍可编辑
+            this.applyListEditable(tag);
             // Abort any previous in-flight request and reset textarea to avoid old content persisting
             try { this._abortController?.abort(); } catch (_) { }
             this._abortController = new AbortController();
@@ -2756,12 +2953,17 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                 elements.listContentLoader.style.display = 'none';
                 elements.listContentTextArea.style.display = 'block';
                 ui.setLoading(elements.listSaveBtn, false);
+                // 加载结束后按条目重新应用只读状态：上面的 setLoading(false) 会把 disabled 重置为可点
+                this.applyListEditable(this.currentTag);
                 this._abortController = null;
             }
         },
 
         async saveList() {
             if (!this.currentTag) return;
+            // 只读条目（editable 为 false）不提交保存，避免对 sd_set/si_set 之类的插件发 POST
+            const profile = this.profiles.find(item => item.tag === this.currentTag);
+            if (profile && profile.editable === false) return;
             ui.setLoading(elements.listSaveBtn, true);
             try {
                 const values = elements.listContentTextArea.value.split('\n').map(s => s.trim()).filter(Boolean);
@@ -4098,6 +4300,7 @@ const handleInteractiveClick = (e) => {
         historyManager.load();
         autoRefreshManager.loadSettings();
         tableSorter.init();
+        initLogFilters();
         switchManager.init();
         // 绑定 info-icon 提示（例如日志容量的说明图标）
         bindInfoIconTooltips();

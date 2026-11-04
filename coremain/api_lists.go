@@ -30,15 +30,24 @@ var listPluginTypes = map[string]bool{
 	"domain_set_light": true,
 	"hosts":            true,
 	"ip_set":           true,
+	"sd_set":           true,
+	"si_set":           true,
+}
+
+// sourceFileTypes 是文件路径不在 args.files / args.hosts，而在 sources 里的插件类型。
+// 这类插件只读展示（Editable=false），规则请在「在线分流」里维护。
+var sourceFileTypes = map[string]bool{
+	"sd_set": true,
+	"si_set": true,
 }
 
 // ListPluginInfo 描述一个名单型插件。
 type ListPluginInfo struct {
-	Tag        string   `json:"tag"`
-	Name       string   `json:"name"`
-	Type       string   `json:"type"`
-	Files      []string `json:"files"`
-	Editable   bool     `json:"editable"`
+	Tag      string   `json:"tag"`
+	Name     string   `json:"name"`
+	Type     string   `json:"type"`
+	Files    []string `json:"files"`
+	Editable bool     `json:"editable"`
 	// Managed 表示这是用户自建名单（data/rule/ 下或以 my_ 开头），
 	// 自动下载的大规则集（geosite_cn 等）不应出现在在线编辑列表里。
 	Managed    bool `json:"managed"`
@@ -67,12 +76,17 @@ func collectListPlugins() []ListPluginInfo {
 			continue
 		}
 		files := extractPluginFiles(p.Args)
+		if sourceFileTypes[p.Type] {
+			files = extractSourceFiles(p.Args)
+		}
 		info := ListPluginInfo{
 			Tag:      p.Tag,
 			Type:     p.Type,
 			Files:    files,
 			Editable: p.Type == "domain_set" || p.Type == "domain_set_light" || p.Type == "hosts",
-			Name:     p.Tag,
+			// sd_set / si_set 的数据源由「在线分流」维护，始终算自建名单。
+			Managed: sourceFileTypes[p.Type],
+			Name:    p.Tag,
 		}
 		if len(files) > 0 {
 			// 名称优先用文件名，方便按文件名识别（用户自己维护的名单都带语义化文件名）。
@@ -124,6 +138,90 @@ func extractPluginFiles(args any) []string {
 		}
 	}
 	return out
+}
+
+// extractSourceFiles 汇总 sd_set / si_set 各数据源的文件路径。
+//
+// 这两类插件的 yaml args 只有 socks5 / local_config，真正的数据源放在
+// local_config 指向的 JSON 里（内容是 []RuleSource，每个元素带 files 字段）；
+// 若 args 里直接内联了 sources，也一并支持。
+func extractSourceFiles(args any) []string {
+	m, ok := args.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	var out []string
+	// 1) args.sources 内联形式。
+	if v, exists := m["sources"]; exists {
+		out = append(out, sourceFilesFrom(v)...)
+	}
+	// 2) local_config 指向的 JSON 文件形式。
+	if p, ok := m["local_config"].(string); ok && strings.TrimSpace(p) != "" {
+		cfg := readSourceConfigJSON(p)
+		if cfg == nil && !filepath.IsAbs(p) && MainConfigBaseDir != "" {
+			// 插件本身按进程工作目录读相对路径，读不到时再按配置目录兜底。
+			cfg = readSourceConfigJSON(filepath.Join(MainConfigBaseDir, p))
+		}
+		if cfg != nil {
+			out = append(out, sourceFilesFrom(cfg)...)
+		}
+	}
+	return out
+}
+
+// readSourceConfigJSON 把数据源配置文件解析成通用结构，读不到或解析失败返回 nil。
+func readSourceConfigJSON(path string) any {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return nil
+	}
+	return v
+}
+
+// sourceFilesFrom 从任意形状的 sources 结构里取出 files 字段。
+func sourceFilesFrom(v any) []string {
+	switch vv := v.(type) {
+	case []any:
+		var out []string
+		for _, item := range vv {
+			out = append(out, sourceFilesFrom(item)...)
+		}
+		return out
+	case map[string]any:
+		f, exists := vv["files"]
+		if !exists {
+			return nil
+		}
+		return stringList(f)
+	}
+	return nil
+}
+
+// stringList 把 files 字段（字符串或字符串数组）展开成文件路径列表。
+func stringList(v any) []string {
+	switch vv := v.(type) {
+	case string:
+		if vv == "" {
+			return nil
+		}
+		return []string{vv}
+	case []string:
+		return vv
+	case []any:
+		var out []string
+		for _, item := range vv {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // countRulesInFile 统计名单文件里的有效规则行数，读不到就返回 0。

@@ -16,6 +16,10 @@ import (
 type V2StatsResponse struct {
 	TotalQueries      uint64  `json:"total_queries"` // MODIFIED: Changed from int to uint64
 	AverageDurationMs float64 `json:"average_duration_ms"`
+	// 以下为概览页新增指标，均为只增不删的附加字段
+	BlockedQueries uint64  `json:"blocked_queries,omitempty"` // 环形缓冲中被拦截的查询条数
+	BlockedRatio   float64 `json:"blocked_ratio,omitempty"`   // 拦截占比，无数据时为 0
+	TodayQueries   uint64  `json:"today_queries,omitempty"`   // 服务启动后累计查询数，取自原子计数
 }
 
 // V2RankItem for ranking APIs
@@ -66,8 +70,10 @@ func handleV2GetStats(w http.ResponseWriter, r *http.Request) {
 // 2. Handler for: Get domain query ranking
 func handleV2GetDomainRank(w http.ResponseWriter, r *http.Request) {
 	limit := parseQueryInt(r, "limit", 20) // Default to top 20
+	// domain_set 非空时只统计该规则集下的记录，为空时走原有快速路径
+	domainSet := r.URL.Query().Get("domain_set")
 	// MODIFIED: Use the new RankByDomain enum
-	rank := GlobalAuditCollector.CalculateRank(RankByDomain, limit) // Changed function argument
+	rank := GlobalAuditCollector.CalculateRankFiltered(RankByDomain, domainSet, limit) // Changed function argument
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(rank); err != nil {
 		mlog.L().Error("failed to encode v2 domain rank", zap.Error(err))
@@ -77,8 +83,10 @@ func handleV2GetDomainRank(w http.ResponseWriter, r *http.Request) {
 // 3. Handler for: Get client IP query ranking
 func handleV2GetClientRank(w http.ResponseWriter, r *http.Request) {
 	limit := parseQueryInt(r, "limit", 20) // Default to top 20
+	// domain_set 非空时只统计该规则集下的记录，为空时走原有快速路径
+	domainSet := r.URL.Query().Get("domain_set")
 	// MODIFIED: Use the new RankByClient enum
-	rank := GlobalAuditCollector.CalculateRank(RankByClient, limit) // Changed function argument
+	rank := GlobalAuditCollector.CalculateRankFiltered(RankByClient, domainSet, limit) // Changed function argument
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(rank); err != nil {
 		mlog.L().Error("failed to encode v2 client rank", zap.Error(err))
@@ -129,6 +137,8 @@ func handleV2GetLogs(w http.ResponseWriter, r *http.Request) {
 		DomainSet:    query.Get("domain_set"),
 		SinceMinutes: parseQueryInt(r, "since", 0),
 	}
+	// domain_set_exclude 是需要排除的规则标签，与 domain_set 同时给出时先包含再剔除；空串不剔除。
+	params.DomainSetExclude = query.Get("domain_set_exclude")
 
 	response := GlobalAuditCollector.GetV2Logs(params)
 	w.Header().Set("Content-Type", "application/json")

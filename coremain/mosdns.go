@@ -120,6 +120,8 @@ func NewMosdns(cfg *Config) (*Mosdns, error) {
 	RegisterSystemAPI(m.httpMux, m)     // For self-restart
         RegisterUpstreamAPI(m.httpMux)
         RegisterListsAPI(m.httpMux)      // 名单插件枚举（按配置文件自动发现）
+	RegisterAliasesAPI(m.httpMux) // 客户端别名（IP -> 名字）
+	RegisterDiagnoseAPI(m.httpMux) // DNS 诊断（真实查询本机 5335）
 
 	// Start http api server
 	if httpAddr := cfg.API.HTTP; len(httpAddr) > 0 {
