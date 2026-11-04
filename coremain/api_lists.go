@@ -41,6 +41,20 @@ var sourceFileTypes = map[string]bool{
 	"si_set": true,
 }
 
+// listDisplayNames 把已知名单的 tag 映射成中文友好名（面板 nav 直接展示这个字段）。
+// 前端 coremain/www/assets/js/log.js 里的 LIST_DISPLAY_NAMES 是同一份映射：
+// 前端优先用本地表，这里返回一致的名字，保证没升级前端时也能看到中文。
+// 表里没有的 tag（用户自建名单）仍沿用文件名，保持原有语义。
+var listDisplayNames = map[string]string{
+	"ddns_hosts":              "静态域名映射",
+	"high_priority_whitelist": "白名单（强制直连）",
+	"high_priority_greylist":  "灰名单（优先代理）",
+	"geosite_cn":              "国内域名集(SRS)",
+	"geosite_gfw":             "国外域名集",
+	"geoip_cn":                "国内 IP 段",
+	"geoip_private":           "内网 IP 段",
+}
+
 // ListPluginInfo 描述一个名单型插件。
 type ListPluginInfo struct {
 	Tag      string   `json:"tag"`
@@ -98,6 +112,10 @@ func collectListPlugins() []ListPluginInfo {
 					break
 				}
 			}
+		}
+		// 已知名单用中文友好名覆盖文件名：nav 上「my_hosts.txt」看不出用途。
+		if name, ok := listDisplayNames[p.Tag]; ok {
+			info.Name = name
 		}
 		out = append(out, info)
 	}

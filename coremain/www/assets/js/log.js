@@ -2784,19 +2784,28 @@ const cacheManager = {
     const listManager = {
         MAX_LINES: 10000,
         currentTag: null,
+        // LIST_DISPLAY_NAMES 是 tag → 中文展示名的映射表，和后端 /api/v1/lists 的 name 字段一致。
+        // 前端优先用本表：后端没升级（仍返回 my_hosts.txt 这种文件名）时 nav 也能显示中文。
+        LIST_DISPLAY_NAMES: {
+            ddns_hosts: '静态域名映射',
+            high_priority_whitelist: '白名单（强制直连）',
+            high_priority_greylist: '灰名单（优先代理）',
+            geosite_cn: '国内域名集(SRS)',
+            geosite_gfw: '国外域名集',
+            geoip_cn: '国内 IP 段',
+            geoip_private: '内网 IP 段'
+        },
         // FALLBACK_PROFILES 是兜底名单：/api/v1/lists 请求失败、返回非数组或空数组时回退到这里，
-        // 保证左侧 nav 不会空白、页面照常可用；正常情况下一律使用接口返回的 tag/name。
+        // 保证左侧 nav 不会空白、页面照常可用；正常情况下一律使用接口返回的 tag。
+        // 这里是本项目配置里真实存在的 7 个名单，不能写配置里没有的 tag（点了只会拿到 API 路由表）。
         FALLBACK_PROFILES: [
-            { tag: 'whitelist', name: '白名单' },
-            { tag: 'blocklist', name: '黑名单' },
-            { tag: 'greylist', name: '灰名单' },
-            { tag: 'realiplist', name: '!CN fakeip filter' },
-            { tag: 'cnfakeipfilter', name: 'CN fakeip filter' },
-            { tag: 'ddnslist', name: 'DDNS 域名' },
-            { tag: 'client_ip', name: '客户端 IP' },
-            { tag: 'direct_ip', name: '直连 IP' },
-            { tag: 'nft_ip', name: 'NFT IP' },
-            { tag: 'rewrite', name: '重定向' }
+            { tag: 'ddns_hosts', name: '静态域名映射' },
+            { tag: 'high_priority_whitelist', name: '白名单（强制直连）' },
+            { tag: 'high_priority_greylist', name: '灰名单（优先代理）' },
+            { tag: 'geosite_cn', name: '国内域名集(SRS)' },
+            { tag: 'geosite_gfw', name: '国外域名集' },
+            { tag: 'geoip_cn', name: '国内 IP 段' },
+            { tag: 'geoip_private', name: '内网 IP 段' }
         ],
         // profiles 是当前生效的名单条目（接口返回优先，失败时为兜底名单）；editable 为 false 的条目只读。
         profiles: [],
@@ -2808,9 +2817,14 @@ const cacheManager = {
             elements.listMgmtNav.addEventListener('click', e => {
                 e.preventDefault();
                 const link = e.target.closest('.list-mgmt-link');
-                if (link && !link.classList.contains('active')) {
-                    this.loadList(link.dataset.listTag);
+                if (!link || link.classList.contains('active')) return;
+                const tag = link.dataset.listTag;
+                // tag 不在当前名单集合内时立刻中止，绝不向后端发 /plugins/<tag>/show
+                if (!this.hasProfile(tag)) {
+                    ui.showToast('该名单不存在，请刷新页面', 'error');
+                    return;
                 }
+                this.loadList(tag);
             });
             elements.listSaveBtn.addEventListener('click', () => this.saveList());
             // 先用兜底名单渲染 nav 占位，再异步拉取真实名单覆盖，保证左侧栏不会长时间空白
@@ -2832,7 +2846,9 @@ const cacheManager = {
                             .filter(item => item && typeof item.tag === 'string' && item.tag)
                             .map(item => ({
                                 tag: item.tag,
-                                name: item.name || item.tag,
+                                // 优先用前端映射表：后端返回的 name 可能还是 my_hosts.txt 这种文件名；
+                                // 映射不到才用后端 name，后端也没给就退回 tag。
+                                name: this.LIST_DISPLAY_NAMES[item.tag] || item.name || item.tag,
                                 editable: item.editable !== false
                             }));
                     }
@@ -2844,10 +2860,24 @@ const cacheManager = {
             }
             if (items.length > 0) this.renderNav(items);
             // nav 就绪后再按首项 tag 走原有 loadList；首屏仍交给空闲时机，避免刷新时卡顿
-            const firstTag = this.profiles.length > 0 ? this.profiles[0].tag : 'whitelist';
+            // 兜底首项也要用真实 tag：whitelist 之类的 tag 本项目不存在，只会换来 API 路由表
+            const firstTag = this.profiles.length > 0 ? this.profiles[0].tag : 'ddns_hosts';
             const startLoad = () => this.loadList(firstTag);
             if ('requestIdleCallback' in window) requestIdleCallback(startLoad, { timeout: 2000 });
             else setTimeout(startLoad, 1200);
+        },
+
+        // hasProfile 判断 tag 是否在当前名单集合里（集合由 renderNav 渲染时确定）。
+        // 不在集合里的 tag 一律不向后端发请求，否则后端会把 API 路由表当正文返回（HTTP 200，不是 404）。
+        hasProfile(tag) {
+            return this.profiles.some(item => item.tag === tag);
+        },
+
+        // isApiErrorBody 识别后端「无效请求」兜底响应（coremain/mosdns.go 的 invalidApiReqHelper）。
+        // 该处理器没有显式写状态码，HTTP 层面是 200，所以 res.ok 判不出来，只能看正文特征：
+        // 首行是「Invalid request <method> <uri>」，随后是「Available api urls:」路由表。
+        isApiErrorBody(text) {
+            return text.startsWith('Invalid request ') || text.indexOf('Available api urls:') !== -1;
         },
 
         // renderNav 用条目数组重建左侧 nav：链接标记仍为 .list-mgmt-link + data-list-tag，
@@ -2889,13 +2919,18 @@ const cacheManager = {
             const hint = document.createElement('p');
             hint.id = 'list-mgmt-readonly-hint';
             hint.style.cssText = 'display: none; font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.75rem;';
-            hint.textContent = '此类名单请在『在线分流』里维护';
+            hint.textContent = '此类名单请在『在线分流』或配置文件里维护';
             container.insertBefore(hint, textarea);
             this.readonlyHint = hint;
             return hint;
         },
 
         async loadList(tag) {
+            // 入口处同样的保护：tag 不在集合内直接 return，不发请求、不改状态
+            if (!this.hasProfile(tag)) {
+                ui.showToast('该名单不存在，请刷新页面', 'error');
+                return;
+            }
             this.currentTag = tag;
             // 先按条目的 editable 锁定输入框与保存按钮，避免只读名单在加载期间仍可编辑
             this.applyListEditable(tag);
@@ -2936,7 +2971,15 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
     signal: this._abortController.signal 
 });
 
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) {
+                    // 失败时后端回的是 API 路由表/错误正文：只进 console，绝不写进编辑框
+                    let bodyText = '';
+                    try { bodyText = await res.text(); } catch (_) { }
+                    console.error(`读取名单“${tag}”失败: HTTP ${res.status}`, bodyText);
+                    const httpError = new Error(`HTTP ${res.status}`);
+                    httpError.httpStatus = res.status;
+                    throw httpError;
+                }
                 const reader = res.body?.getReader();
                 let totalLines = 0, shownLines = 0;
                 let buffer = '';
@@ -2953,6 +2996,19 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                             totalLines++;
                             const line = buffer.slice(0, nl);
                             buffer = buffer.slice(nl + 1);
+                            // 没有 /show 的插件（如 sd_set）后端回的是 200 + API 路由表，首行就能认出来
+                            if (totalLines === 1 && this.isApiErrorBody(line)) {
+                                // 收齐剩余正文（上限 64KB）再抛，方便在 console 里看完整的路由表
+                                let rest = line + '\n' + buffer;
+                                while (rest.length < 65536) {
+                                    const next = await reader.read();
+                                    if (next.done) break;
+                                    rest += decoder.decode(next.value, { stream: true });
+                                }
+                                const apiBodyError = new Error('API 路由表');
+                                apiBodyError.apiRouteTable = rest;
+                                throw apiBodyError;
+                            }
                             if (shownLines < CHUNK_LIMIT) {
                                 elements.listContentTextArea.value += (shownLines ? '\n' : '') + line;
                                 shownLines++;
@@ -2977,6 +3033,11 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                 } else {
                     // 兼容不支持流式的环境
                     const text = await res.text();
+                    if (this.isApiErrorBody(text)) {
+                        const apiBodyError = new Error('API 路由表');
+                        apiBodyError.apiRouteTable = text;
+                        throw apiBodyError;
+                    }
                     const parts = text.split('\n');
                     totalLines = parts.length;
                     elements.listContentTextArea.value = parts.slice(0, CHUNK_LIMIT).join('\n');
@@ -2989,8 +3050,14 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                     // 用户快速切换导致的中断，不提示错误
                     elements.listContentInfo.textContent = '已取消';
                 } else {
-                    elements.listContentTextArea.value = `加载列表“${tag}”失败。`;
-                    elements.listContentInfo.textContent = '加载失败';
+                    // 清空编辑框：失败响应正文（错误页/API 路由表）只进 console，绝不能被当成名单内容
+                    elements.listContentTextArea.value = '';
+                    if (error?.apiRouteTable) console.error(`读取名单“${tag}”拿到的是 API 路由表，不是名单内容:`, error.apiRouteTable);
+                    let reason;
+                    if (error?.apiRouteTable) reason = '该名单不支持在线读取';
+                    else if (error?.httpStatus) reason = String(error.httpStatus);
+                    else reason = error?.message || '网络错误';
+                    elements.listContentInfo.textContent = `读取失败：${reason}`;
                     ui.showToast(`加载列表“${tag}”失败`, 'error');
                 }
             } finally {
