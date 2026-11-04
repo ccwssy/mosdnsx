@@ -270,6 +270,7 @@ func (m *Mosdns) initHttpMux() {
 
 	// [新增] 根路由 ("/") 的 handler，指向 mosdnsp.html
 	rootHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache") // 首页内联 JS，HTML 旧则全旧
 		data, err := content.ReadFile("www/mosdnsp.html") // 读取新文件
 		if err != nil {
 			m.logger.Error("Error reading embedded file", zap.String("file", "www/mosdnsp.html"), zap.Error(err))
@@ -298,6 +299,7 @@ func (m *Mosdns) initHttpMux() {
 
 	// [新增] log 路由 ("/log") 的 handler, 指向 /www/log.html
 	logHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache") // 日志页 HTML 防强缓存
 		data, err := content.ReadFile("www/log.html") // 读取 /www/log.html
 		if err != nil {
 			m.logger.Error("Error reading embedded file", zap.String("file", "www/log.html"), zap.Error(err))
@@ -328,6 +330,8 @@ func (m *Mosdns) initHttpMux() {
 	}
 
 	staticAssetHandler := func(w http.ResponseWriter, r *http.Request) {
+		// 面板前端常改，禁止浏览器强缓存：每次都协商校验，避免「旧 JS 配新 HTML」初始化崩溃
+		w.Header().Set("Cache-Control", "no-cache")
 		relativePath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if !strings.HasPrefix(relativePath, "assets/") {
 			http.NotFound(w, r)
