@@ -295,7 +295,6 @@
             html body table.mobile-card-view > thead { display: none !important; }
 
             html body #cache-stats-table, 
-            html body #upstream-dns-table,
             html body #adguard-rules-table,
             html body #diversion-rules-table {
                 min-width: 0 !important;
@@ -1470,51 +1469,6 @@
                     </div>
                 </div>
 
-                <div class="control-module" id="upstream-dns-module" style="grid-column: 1 / -1;">
-                    <!-- 标题栏 -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h3 style="margin: 0;">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M4 19h16v-7h2v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8h2v7zM20 3H4v7h2V5h12v5h2V4a1 1 0 0 0-1-1z"></path>
-                            </svg>
-                            上游DNS设置
-                        </h3>
-                        <button id="add-upstream-btn" class="button primary small">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                            添加上游DNS
-                        </button>
-                    </div>
-
-                    <div class="scrollable-table-container">
-                        <table class="data-table" id="upstream-dns-table" style="min-width: 1000px;">
-                            <thead>
-                                <tr>
-                                    <th style="width: 80px; white-space: nowrap;">启用</th>
-                                    <th style="min-width: 120px;">所属组</th>
-                                    <th style="min-width: 100px;">名称</th>
-                                    <th style="min-width: 60px; white-space: nowrap;">类型</th>
-                                    <th class="text-center" style="min-width: 100px; white-space: nowrap;">平均响应</th>
-                                    <th class="text-center">请求数</th>
-                                    <th class="text-center">采纳数</th>
-                                    <th class="text-center">采纳率</th>
-                                    <th class="text-center">错误数</th>
-                                    <th class="text-center">出错率</th>
-                                    <th class="text-center" style="width: 140px;">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="upstream-dns-tbody">
-                                <!-- JS 渲染内容 -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- 修改点：justify-content: flex-end 确保靠右 -->
-                    <div class="button-group" style="margin-top: 1rem; display: flex; justify-content: flex-end;">
-                         <!-- 修改点：去掉可能导致全宽的样式，或显式指定 auto 宽度 -->
-                         <button id="upstream-restart-btn" class="button primary" style="width: auto;">重启 MosDNS</button>
-                    </div>
-                </div>
-
                 <!-- 覆盖配置 -->
                 <div class="control-module" id="overrides-module" style="display: none;">
                     <h3>
@@ -1543,6 +1497,7 @@
                             <div class="button-group">
                                 <button id="overrides-load-btn-log" class="button secondary"><span>读取当前</span></button>
                                 <button id="overrides-save-btn-log" class="button primary"><span>保存</span></button>
+                                <button id="upstream-restart-btn" class="button primary" style="width: auto;">重启 MosDNS</button>
                             </div>
                         </div>
                     </div>
@@ -1552,7 +1507,7 @@
         </section>
     </main>
 
-    <script src="assets/js/log.js?v=20261104d" defer></script>
+    <script src="assets/js/log.js?v=20261104e" defer></script>
 </body>
 
 </html>
