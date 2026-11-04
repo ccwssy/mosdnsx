@@ -812,13 +812,6 @@
                     <div class="data-view-group" id="data-view-buttons"></div>
                 </div>
             </section>
-            <!-- 拦截 TOP10：/api/v2/audit/rank/domain?domain_set=adguard&limit=10 -->
-            <section class="control-section">
-                <div class="control-section-body">
-                    <h4 class="section-title"><i class="fas fa-ban"></i> 拦截 TOP10</h4>
-                    <div id="adguard-top10-table"></div>
-                </div>
-            </section>
             <section class="control-section">
                 <div class="control-section-body">
                     <h4 class="section-title"><i class="fas fa-stethoscope"></i> DNS 诊断</h4>
@@ -1233,7 +1226,7 @@
             const lastUpdatedEl = getById('last_updated');
             if(lastUpdatedEl) lastUpdatedEl.innerHTML = `<i class="fas fa-clock"></i> 最后更新: ${new Date().toLocaleTimeString()}`;
 
-            // 首页监控区（广告过滤开关 / 今日统计 / 拦截 TOP10）跟随既有刷新流程一起更新
+            // 首页监控区（广告过滤开关 / 今日统计）跟随既有刷新流程一起更新
             await refreshPanelInsights();
 
             initializeTooltips();
@@ -2060,7 +2053,7 @@
             container.appendChild(list);
         }
 
-        // --- 广告过滤总开关 / 今日统计 / 拦截 TOP10 BEGIN ---
+        // --- 广告过滤总开关 / 今日统计 BEGIN ---
         // 按服务端返回值渲染开关：状态字段只写「开 / 关」，不出现 Enabled/Boolean 这类工具字
         function renderAdguardState(enabled) {
             const toggle = getById('adguard-enabled-toggle');
@@ -2161,58 +2154,6 @@
             }
         }
 
-        // 拦截 TOP10：接口返回 [{key,count}]，key 为域名，count 为请求数（字段定义见 coremain/api_audit_v2.go 的 V2RankItem）
-        async function loadAdguardTop10() {
-            const wrapper = getById('adguard-top10-table');
-            if (!wrapper) return;
-            try {
-                const res = await fetch('/api/v2/audit/rank/domain?domain_set=adguard&limit=10');
-                if (!res.ok) throw new Error('读取拦截排行失败: ' + res.status);
-                const rows = await res.json();
-                const list = Array.isArray(rows) ? rows : [];
-                wrapper.innerHTML = '';
-                if (list.length === 0) {
-                    const empty = createElement('p', '', '暂无拦截记录');
-                    empty.style.color = 'var(--label-color)';
-                    empty.style.fontSize = '.9rem';
-                    wrapper.appendChild(empty);
-                    return;
-                }
-                const table = D.createElement('table');
-                table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: .9rem;';
-                const thead = D.createElement('thead');
-                const headRow = D.createElement('tr');
-                ['域名', '请求数'].forEach(function (title, i) {
-                    const th = D.createElement('th');
-                    th.innerText = title;
-                    th.style.cssText = 'text-align: ' + (i === 1 ? 'right' : 'left') + '; padding: .35rem .4rem; border-bottom: 1px solid var(--border-color);';
-                    headRow.appendChild(th);
-                });
-                thead.appendChild(headRow);
-                const tbody = D.createElement('tbody');
-                list.forEach(function (item) {
-                    const tr = D.createElement('tr');
-                    const tdKey = D.createElement('td');
-                    // 域名用 textContent 写入，避免把日志内容当 HTML 解析
-                    tdKey.textContent = String(item.key === null || item.key === undefined ? '' : item.key);
-                    tdKey.style.cssText = 'padding: .35rem .4rem; word-break: break-all;';
-                    const tdCount = D.createElement('td');
-                    tdCount.innerText = formatNumber(item.count || 0);
-                    tdCount.style.cssText = 'padding: .35rem .4rem; text-align: right;';
-                    tr.append(tdKey, tdCount);
-                    tbody.appendChild(tr);
-                });
-                table.append(thead, tbody);
-                wrapper.appendChild(table);
-            } catch (e) {
-                wrapper.innerHTML = '';
-                const fail = createElement('p', '', '拦截排行获取失败');
-                fail.style.color = 'var(--label-color)';
-                fail.style.fontSize = '.9rem';
-                wrapper.appendChild(fail);
-            }
-        }
-
         // 首页监控区统一刷新入口，已接入 refreshData 的加载与定时刷新流程
         async function refreshPanelInsights() {
             const toggle = getById('adguard-enabled-toggle');
@@ -2221,9 +2162,9 @@
                 toggle.dataset.panelBound = '1';
                 toggle.onchange = function (e) { setAdguardEnabled(e.target.checked); };
             }
-            await Promise.all([loadAdguardEnabled(), loadTodayStats(), loadAdguardTop10()]);
+            await Promise.all([loadAdguardEnabled(), loadTodayStats()]);
         }
-        // --- 广告过滤总开关 / 今日统计 / 拦截 TOP10 END ---
+        // --- 广告过滤总开关 / 今日统计 END ---
 
         // --- END OF REVISED LOG RENDERING LOGIC ---
 

@@ -769,10 +769,10 @@
                                 <path
                                     d="M11.25 4.53335C11.6642 4.44457 12.0858 4.44457 12.5 4.53335C17.1524 5.54133 21 9.80443 21 14.6465C21 19.9806 16.9706 22 12 22C7.02944 22 3 19.9806 3 14.6465C3 9.80443 6.84759 5.54133 11.25 4.53335ZM12 2C6.47715 2 2 7.02165 2 14.6465C2 21.4939 6.27609 24 12 24C17.7239 24 22 21.4939 22 14.6465C22 7.02165 17.5228 2 12 2Z">
                                 </path>
-                            </svg><span>最新日志条目数</span></h3>
+                            </svg><span>今日查询</span></h3>
                         <div class="stat-card-main">
                             <div id="total-queries" class="value">--</div>
-                            <span id="total-queries-change" class="stat-change" style="visibility: hidden;"></span>
+                            <span id="total-queries-change" class="stat-change"></span>
                         </div>
                         <div class="sparkline-container" id="sparkline-total"></div>
                     </div>
@@ -855,6 +855,32 @@
                                     </tr>
                                 </thead>
                                 <tbody id="top-domains-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card lazy-load-card" id="top-blocked-card">
+                    <header class="card-header">
+                        <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z">
+                                </path>
+                            </svg>拦截排行</h2>
+                    </header>
+                    <div class="card-body">
+                        <div class="lazy-placeholder">
+                            <div class="spinner"></div>
+                        </div>
+                        <div class="scrollable-table-container">
+                            <table class="mobile-card-layout">
+                                <thead>
+                                    <tr>
+                                        <th>域名</th>
+                                        <th class="text-right hide-on-mobile">请求数</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="top-blocked-body"></tbody>
                             </table>
                         </div>
                     </div>

@@ -33,7 +33,7 @@ function closeAndUnlock(dialogElement) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const CONSTANTS = { API_BASE_URL: '', LOGS_PER_PAGE: 50, HISTORY_LENGTH: 60, DEFAULT_AUTO_REFRESH_INTERVAL: 15, ANIMATION_DURATION: 1000, MOBILE_BREAKPOINT: 1024, TOAST_DURATION: 3000, SKELETON_ROWS: 10, TOOLTIP_SHOW_DELAY: 200, TOOLTIP_HIDE_DELAY: 250, UPDATE_AUTO_MINUTES_DEFAULT: 1440 };
-    let state = { isUpdating: false, isCapturing: false, isMobile: false, isTouchDevice: false, currentLogPage: 1, isLogLoading: false, logPaginationInfo: null, displayedLogs: [], currentLogSearchTerm: '', clientAliases: {}, topDomains: [], topClients: [], slowestQueries: [], domainSetRank: [], shuntColors: {}, logSort: { key: 'query_time', order: 'desc' }, autoRefresh: { enabled: false, intervalId: null, intervalSeconds: CONSTANTS.DEFAULT_AUTO_REFRESH_INTERVAL }, data: { totalQueries: { current: null, previous: null }, avgDuration: { current: null, previous: null } }, history: { totalQueries: [], avgDuration: [], timestamps: [] }, lastUpdateTime: null, adguardRules: [], diversionRules: [], requery: { status: null, config: null, pollId: null }, dataView: { rawEntries: [], filteredEntries: [], viewType: 'domain', currentOffset: 0, currentLimit: 100, currentQuery: '', currentConfig: null, hasMore: true, totalCount: 0 }, coreMode: 'A', cacheStats: {}, listManagerInitialized: false, featureSwitches: {}, systemInfo: {}, update: { status: null, loading: false, auto: { enabled: true, intervalMinutes: CONSTANTS.UPDATE_AUTO_MINUTES_DEFAULT, timerId: null } } };
+    let state = { isUpdating: false, isCapturing: false, isMobile: false, isTouchDevice: false, currentLogPage: 1, isLogLoading: false, logPaginationInfo: null, displayedLogs: [], currentLogSearchTerm: '', clientAliases: {}, topDomains: [], topClients: [], topBlocked: [], slowestQueries: [], domainSetRank: [], shuntColors: {}, logSort: { key: 'query_time', order: 'desc' }, autoRefresh: { enabled: false, intervalId: null, intervalSeconds: CONSTANTS.DEFAULT_AUTO_REFRESH_INTERVAL }, data: { totalQueries: { current: null, previous: null }, avgDuration: { current: null, previous: null }, todayQueries: { current: null, previous: null }, blocked: { queries: null, ratio: null } }, history: { totalQueries: [], avgDuration: [], timestamps: [] }, lastUpdateTime: null, adguardRules: [], diversionRules: [], requery: { status: null, config: null, pollId: null }, dataView: { rawEntries: [], filteredEntries: [], viewType: 'domain', currentOffset: 0, currentLimit: 100, currentQuery: '', currentConfig: null, hasMore: true, totalCount: 0 }, coreMode: 'A', cacheStats: {}, listManagerInitialized: false, featureSwitches: {}, systemInfo: {}, update: { status: null, loading: false, auto: { enabled: true, intervalMinutes: CONSTANTS.UPDATE_AUTO_MINUTES_DEFAULT, timerId: null } } };
     const elements = {
         html: document.documentElement, body: document.body, container: document.querySelector('.container'), initialLoader: document.getElementById('initial-loader'),
         colorSwatches: document.querySelectorAll('.color-swatch'),
@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         auditStatus: document.getElementById('audit-status'), toggleAuditBtn: document.getElementById('toggle-audit-btn'), clearAuditBtn: document.getElementById('clear-audit-btn'),
         auditCapacity: document.getElementById('audit-capacity'), capacityForm: document.getElementById('capacity-form'), newCapacityInput: document.getElementById('new-capacity'),
         cacheStatsTbody: document.getElementById('cache-stats-tbody'),
-        topDomainsBody: document.getElementById('top-domains-body'), topClientsBody: document.getElementById('top-clients-body'), slowestQueriesBody: document.getElementById('slowest-queries-body'),
+        topDomainsBody: document.getElementById('top-domains-body'), topClientsBody: document.getElementById('top-clients-body'), slowestQueriesBody: document.getElementById('slowest-queries-body'), topBlockedBody: document.getElementById('top-blocked-body'),
         shuntResultsBody: document.getElementById('shunt-results-body'),
         // 覆盖配置元素
         overridesModule: document.getElementById('overrides-module'),
@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 轻量级请求器 + /metrics 简易缓存，减少同一时段的重复请求
     let __metricsInflight = null; let __metricsStamp = 0;
-    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, getCoreMode: (signal) => api.fetch('/plugins/switch3/show', { signal }), clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
+    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, getCoreMode: (signal) => api.fetch('/plugins/switch3/show', { signal }), clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getBlockedDomains: (signal, limit = 10) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?domain_set=adguard&limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
 
     const requeryApi = {
         getConfig: (signal) => api.fetch(`/plugins/requery`, { signal }),
@@ -225,10 +225,16 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatus(isCapturing) { if (!elements.toggleAuditBtn || !elements.auditStatus) return; this.setLoading(elements.toggleAuditBtn, false); const statusIndicator = elements.systemControlTabIndicator; if (statusIndicator) statusIndicator.className = 'status-indicator'; if (typeof isCapturing === 'boolean') { state.isCapturing = isCapturing; elements.auditStatus.textContent = isCapturing ? '运行中' : '已停止'; elements.auditStatus.style.color = isCapturing ? 'var(--color-success)' : 'var(--color-danger)'; const actionText = isCapturing ? '关闭审计' : '开启审计'; elements.toggleAuditBtn.querySelector('span').textContent = actionText; elements.toggleAuditBtn.dataset.defaultText = actionText; elements.toggleAuditBtn.className = `button ${isCapturing ? 'danger' : 'primary'}`; if (statusIndicator) statusIndicator.classList.add(isCapturing ? 'running' : 'stopped'); } else { elements.auditStatus.textContent = '未知'; elements.auditStatus.style.color = 'var(--color-text-secondary)'; elements.toggleAuditBtn.querySelector('span').textContent = '刷新状态'; elements.toggleAuditBtn.dataset.defaultText = '刷新状态'; } },
         updateCapacity(capacity) { if (elements.auditCapacity) elements.auditCapacity.textContent = capacity != null ? `${capacity.toLocaleString()} 条` : '查询失败'; },
         updateOverviewStats() {
-            const { totalQueries, avgDuration } = state.data;
-            animateValue(elements.totalQueries, totalQueries.previous, totalQueries.current, CONSTANTS.ANIMATION_DURATION);
+            const { avgDuration, todayQueries, blocked } = state.data;
+            // 今日查询：主值取 /api/v2/audit/stats 的 today_queries，字段缺失时保持 --
+            if (todayQueries.current === null) { if (elements.totalQueries) elements.totalQueries.textContent = '--'; }
+            else { animateValue(elements.totalQueries, todayQueries.previous, todayQueries.current, CONSTANTS.ANIMATION_DURATION); }
             animateValue(elements.avgDuration, avgDuration.previous, avgDuration.current, CONSTANTS.ANIMATION_DURATION, 2);
-            updateStatChange(elements.totalQueriesChange, totalQueries.previous, totalQueries.current);
+            // 副标常显：拦截条数 · 拦截率（保留两位小数），两项缺失时各自显示 --
+            const blockedText = typeof blocked.queries === 'number' ? blocked.queries.toLocaleString() : '--';
+            const blockedRatioText = typeof blocked.ratio === 'number' ? (blocked.ratio * 100).toFixed(2) : '--';
+            elements.totalQueriesChange.textContent = '拦截 ' + blockedText + ' · 拦截率 ' + blockedRatioText + '%';
+            elements.totalQueriesChange.style.visibility = 'visible';
             updateStatChange(elements.avgDurationChange, avgDuration.previous, avgDuration.current, true);
 
             // Standard small charts
@@ -1589,6 +1595,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tableType === 'log-query' && state.currentLogSearchTerm?.query) {
                 message = `没有找到与 "<strong>${state.currentLogSearchTerm.query}</strong>" 匹配的记录。`;
                 ctaButton = '';
+            } else if (tableType === 'blocked') {
+                // 拦截排行空态：固定文案，不挂跳转按钮
+                message = '暂无拦截记录。';
+                ctaButton = '';
             } else if (!state.isCapturing && tableType !== 'adguard' && tableType !== 'diversion') {
                 message = '审计功能当前已停止。';
             } else if (tableType === 'adguard' || tableType === 'diversion') {
@@ -1657,6 +1667,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return tr;
     }, 'lazy');
+
+    // 拦截排行：数据来自 rank/domain?domain_set=adguard，字段为 {key,count}，空列表走 renderTable 的「暂无拦截记录」空态
+    const renderTopBlocked = (data) => renderTable(elements.topBlockedBody, data, (item, index) => {
+        const tr = document.createElement('tr');
+        tr.dataset.rankIndex = index;
+        tr.dataset.rankSource = 'blocked';
+        const key = item && item.key !== null && item.key !== undefined ? String(item.key) : '';
+        const countText = (Number(item && item.count) || 0).toLocaleString();
+
+        if (state.isMobile) {
+            tr.innerHTML = `
+                <td>
+                    <div class="mobile-log-row" style="grid-template-areas: 'domain time'; gap: 0.5rem 1rem;">
+                        <div class="domain" title="${key}">${key}</div>
+                        <div class="time" style="font-size: 1rem; font-weight: 600;">
+                            <a href="#log-query" class="clickable-link" data-filter-value="${key}">${countText}</a>
+                        </div>
+                    </div>
+                </td>`;
+        } else {
+            tr.innerHTML = `
+                <td><span class="truncate-text" title="${key}">${key}</span></td>
+                <td class="text-right"><a href="#log-query" class="clickable-link" data-filter-value="${key}">${countText}</a></td>`;
+        }
+        return tr;
+    }, 'blocked');
 
     const renderTopClients = (data) => renderTable(elements.topClientsBody, data, (item, index) => {
         const tr = document.createElement('tr');
@@ -1744,6 +1780,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.data.avgDuration.previous = state.data.avgDuration.current === null ? stats.average_duration_ms : state.data.avgDuration.current;
                 state.data.totalQueries.current = stats.total_queries;
                 state.data.avgDuration.current = stats.average_duration_ms;
+                // 今日查询 / 拦截 / 拦截率：缺字段统一归一为 null，由渲染层显示 --
+                const todayQueries = typeof stats.today_queries === 'number' ? stats.today_queries : null;
+                state.data.todayQueries.previous = state.data.todayQueries.current === null ? todayQueries : state.data.todayQueries.current;
+                state.data.todayQueries.current = todayQueries;
+                state.data.blocked.queries = typeof stats.blocked_queries === 'number' ? stats.blocked_queries : null;
+                state.data.blocked.ratio = typeof stats.blocked_ratio === 'number' ? stats.blocked_ratio : null;
                 ui.updateOverviewStats();
                 historyManager.add(stats.total_queries, stats.average_duration_ms);
             }
@@ -1778,9 +1820,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (forceAll) {
-                const [topDomainsRes, topClientsRes, slowestRes] = await Promise.allSettled([api.v2.getTopDomains(signal, 100), api.v2.getTopClients(signal, 100), api.v2.getSlowest(signal, 100)]);
+                const [topDomainsRes, topClientsRes, slowestRes, topBlockedRes] = await Promise.allSettled([api.v2.getTopDomains(signal, 100), api.v2.getTopClients(signal, 100), api.v2.getSlowest(signal, 100), api.v2.getBlockedDomains(signal, 10)]);
 
                 if (topDomainsRes.status === 'fulfilled') { state.topDomains = topDomainsRes.value || []; renderTopDomains(state.topDomains); }
+                if (topBlockedRes.status === 'fulfilled') { state.topBlocked = topBlockedRes.value || []; renderTopBlocked(state.topBlocked); }
                 if (topClientsRes.status === 'fulfilled') { state.topClients = topClientsRes.value || []; renderTopClients(state.topClients); }
                 if (slowestRes.status === 'fulfilled') { state.slowestQueries = slowestRes.value || []; renderSlowestQueries(state.slowestQueries); }
             }
@@ -2182,6 +2225,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (activeTab === 'overview') {
                 renderSlowestQueries(state.slowestQueries);
                 renderTopDomains(state.topDomains);
+                renderTopBlocked(state.topBlocked);
                 renderTopClients(state.topClients);
             } else if (activeTab === 'rules') {
                 adguardManager.render();
@@ -4213,6 +4257,7 @@ const handleInteractiveClick = (e) => {
                     const cardId = card.id;
                     switch (cardId) {
                         case 'top-domains-card': api.v2.getTopDomains(null, 100).then(data => { state.topDomains = data || []; renderTopDomains(state.topDomains); }).catch(console.error); break;
+                        case 'top-blocked-card': api.v2.getBlockedDomains(null, 10).then(data => { state.topBlocked = data || []; renderTopBlocked(state.topBlocked); }).catch(console.error); break;
                         case 'top-clients-card': api.v2.getTopClients(null, 100).then(data => { state.topClients = data || []; renderTopClients(state.topClients); }).catch(console.error); break;
                         case 'slowest-queries-card': api.v2.getSlowest(null, 100).then(data => { state.slowestQueries = data || []; renderSlowestQueries(state.slowestQueries); }).catch(console.error); break;
                         case 'shunt-results-card': api.v2.getDomainSetRank(null, 100).then(data => { state.domainSetRank = data || []; renderDonutChart(state.domainSetRank); }).catch(console.error); break;
