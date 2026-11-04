@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	githubOwner          = "yyysuo"
-	githubRepo           = "mosdns"
+	githubOwner          = "ccwssy"
+	githubRepo           = "mosdnsx"
 	releaseTag           = "v5-ph-srs"
 	githubReleaseAPI     = "https://api.github.com/repos/%s/%s/releases/tags/%s"
 	githubLatestAPI      = "https://api.github.com/repos/%s/%s/releases/latest"
@@ -41,7 +41,7 @@ const (
 	userAgent            = "mosdns-update-client"
 	stateFileName        = ".mosdns-update-state.json"
 	// 默认的重启端点；可由环境变量 MOSDNS_RESTART_ENDPOINT 覆盖。
-	postUpgradeEndpoint = "http://127.0.0.1:9099/api/v1/system/restart"
+	postUpgradeEndpoint = "http://127.0.0.1:9198/api/v1/system/restart"
 )
 
 var (
@@ -466,6 +466,12 @@ func (m *UpdateManager) PerformUpdate(ctx context.Context, force bool, preferV3 
 		action.Notes = fmt.Sprintf("获取当前可执行文件失败: %v", err)
 		return action, err
 	}
+	// docker 单文件 bind mount（如 -v ./bin/mosdns:/usr/bin/mosdns）绑的是旧 inode：
+	// 替换 exePath 本身后容器经 /usr/bin/mosdns 仍读旧文件。若存在与 exePath
+	// 同一文件的目录树路径（经 ./ 挂载暴露，如 /etc/mosdns/bin/mosdns），优先替换该路径。
+	if cand := findDirTreeAlias(exePath); cand != "" {
+		exePath = cand
+	}
 
 	if runtime.GOOS == "windows" {
 		target := exePath + ".new"
@@ -578,10 +584,25 @@ func (m *UpdateManager) isUpdateNeeded(latest, signature string) bool {
 	return m.updateAvailableLocked(latest, signature)
 }
 
+// extractBuildSHA 抽取自建版本串尾部的 7 位 git 短 SHA（如
+// v5.3.4-mosdnsx1-20261104-7594047 或 tag v5-ph-srs-20261104-7594047）。
+// 分支版本号格式与 tag 格式不同，但同一提交的 SHA 一致，比对 SHA 才准确。
+func extractBuildSHA(v string) string {
+	if m := regexp.MustCompile(`-([0-9a-fA-F]{7})$`).FindStringSubmatch(strings.TrimSpace(v)); len(m) == 2 {
+		return strings.ToLower(m[1])
+	}
+	return ""
+}
+
 func (m *UpdateManager) updateAvailableLocked(latest, signature string) bool {
 	latestNorm := normalizeVersion(latest)
 	currentNorm := normalizeVersion(m.currentVersion)
 	if latestNorm != "" && currentNorm != "" && latestNorm == currentNorm {
+		return false
+	}
+	// 自建发布体系：current 与 latest 同提交（SHA 相同）即视为最新，
+	// 避免「v5.3.4-mosdnsx1-…」与「v5-ph-srs-…」格式差异永远误报有更新。
+	if curSHA, latestSHA := extractBuildSHA(m.currentVersion), extractBuildSHA(latest); curSHA != "" && latestSHA != "" && curSHA == latestSHA {
 		return false
 	}
 	if signature != "" {
@@ -1067,6 +1088,29 @@ func extractBinaryFromZip(zipPath string) (string, os.FileMode, error) {
 	}
 
 	return tmpFile.Name(), mode, nil
+}
+
+// findDirTreeAlias 查找与 exePath 指向同一文件（os.SameFile）的挂载数据目录内路径。
+// 命中则返回该路径作为更新目标——目录 bind mount 下替换目录树内文件，容器内立即可见。
+func findDirTreeAlias(exePath string) string {
+	exeInfo, err := os.Stat(exePath)
+	if err != nil {
+		return ""
+	}
+	candidates := []string{"/etc/mosdns/bin/mosdns", "/etc/mosdns-x/bin/mosdns"}
+	for _, cand := range candidates {
+		if cand == exePath {
+			continue
+		}
+		info, err := os.Stat(cand)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if os.SameFile(exeInfo, info) {
+			return cand
+		}
+	}
+	return ""
 }
 
 func installBinary(exePath, newBinary string, mode os.FileMode) error {
