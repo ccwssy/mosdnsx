@@ -912,6 +912,35 @@
                     </div>
                 </div>
 
+                <div class="card lazy-load-card" id="upstream-stats-card">
+                    <header class="card-header">
+                        <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M20 13H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 19c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM20 3H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z">
+                                </path>
+                            </svg>上游 DNS</h2>
+                    </header>
+                    <div class="card-body">
+                        <div class="lazy-placeholder">
+                            <div class="spinner"></div>
+                        </div>
+                        <p class="text-muted" style="font-size: 0.8rem; margin: 0 0 0.5rem;">国外查询经 OpenClash 统一出口，其内部上游不可细分</p>
+                        <div class="scrollable-table-container">
+                            <table class="mobile-card-layout">
+                                <thead>
+                                    <tr>
+                                        <th>上游</th>
+                                        <th class="text-right">查询数</th>
+                                        <th class="text-right">失败</th>
+                                        <th class="text-right hide-on-mobile">平均耗时</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="upstream-stats-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card lazy-load-card" id="slowest-queries-card">
                     <header class="card-header">
                         <h2><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">

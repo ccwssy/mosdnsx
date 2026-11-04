@@ -118,6 +118,7 @@ func NewMosdns(cfg *Config) (*Mosdns, error) {
 	RegisterConfigManagerAPI(m.httpMux)
 	RegisterUpdateAPI(m.httpMux)     // For binary updates
 	RegisterSystemAPI(m.httpMux, m)     // For self-restart
+	RegisterUpstreamStatsAPI(m.httpMux, m)
         RegisterUpstreamAPI(m.httpMux)
         RegisterListsAPI(m.httpMux)      // 名单插件枚举（按配置文件自动发现）
 	RegisterAliasesAPI(m.httpMux) // 客户端别名（IP -> 名字）

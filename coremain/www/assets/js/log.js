@@ -33,7 +33,7 @@ function closeAndUnlock(dialogElement) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const CONSTANTS = { API_BASE_URL: '', LOGS_PER_PAGE: 50, HISTORY_LENGTH: 60, DEFAULT_AUTO_REFRESH_INTERVAL: 15, ANIMATION_DURATION: 1000, MOBILE_BREAKPOINT: 1024, TOAST_DURATION: 3000, SKELETON_ROWS: 10, TOOLTIP_SHOW_DELAY: 200, TOOLTIP_HIDE_DELAY: 250, UPDATE_AUTO_MINUTES_DEFAULT: 1440 };
-    let state = { isUpdating: false, isCapturing: false, isMobile: false, isTouchDevice: false, currentLogPage: 1, isLogLoading: false, logPaginationInfo: null, displayedLogs: [], currentLogSearchTerm: '', clientAliases: {}, topDomains: [], topClients: [], topBlocked: [], slowestQueries: [], domainSetRank: [], shuntColors: {}, logSort: { key: 'query_time', order: 'desc' }, autoRefresh: { enabled: false, intervalId: null, intervalSeconds: CONSTANTS.DEFAULT_AUTO_REFRESH_INTERVAL }, data: { totalQueries: { current: null, previous: null }, avgDuration: { current: null, previous: null }, todayQueries: { current: null, previous: null }, blocked: { queries: null, ratio: null } }, history: { totalQueries: [], avgDuration: [], timestamps: [] }, lastUpdateTime: null, adguardRules: [], diversionRules: [], requery: { status: null, config: null, pollId: null }, dataView: { rawEntries: [], filteredEntries: [], viewType: 'domain', currentOffset: 0, currentLimit: 100, currentQuery: '', currentConfig: null, hasMore: true, totalCount: 0 }, coreMode: 'A', cacheStats: {}, listManagerInitialized: false, featureSwitches: {}, systemInfo: {}, update: { status: null, loading: false, auto: { enabled: true, intervalMinutes: CONSTANTS.UPDATE_AUTO_MINUTES_DEFAULT, timerId: null } } };
+    let state = { isUpdating: false, isCapturing: false, isMobile: false, isTouchDevice: false, currentLogPage: 1, isLogLoading: false, logPaginationInfo: null, displayedLogs: [], currentLogSearchTerm: '', clientAliases: {}, topDomains: [], topClients: [], topBlocked: [], slowestQueries: [], upstreamStats: [], domainSetRank: [], shuntColors: {}, logSort: { key: 'query_time', order: 'desc' }, autoRefresh: { enabled: false, intervalId: null, intervalSeconds: CONSTANTS.DEFAULT_AUTO_REFRESH_INTERVAL }, data: { totalQueries: { current: null, previous: null }, avgDuration: { current: null, previous: null }, todayQueries: { current: null, previous: null }, blocked: { queries: null, ratio: null } }, history: { totalQueries: [], avgDuration: [], timestamps: [] }, lastUpdateTime: null, adguardRules: [], diversionRules: [], requery: { status: null, config: null, pollId: null }, dataView: { rawEntries: [], filteredEntries: [], viewType: 'domain', currentOffset: 0, currentLimit: 100, currentQuery: '', currentConfig: null, hasMore: true, totalCount: 0 }, coreMode: 'A', cacheStats: {}, listManagerInitialized: false, featureSwitches: {}, systemInfo: {}, update: { status: null, loading: false, auto: { enabled: true, intervalMinutes: CONSTANTS.UPDATE_AUTO_MINUTES_DEFAULT, timerId: null } } };
     const elements = {
         html: document.documentElement, body: document.body, container: document.querySelector('.container'), initialLoader: document.getElementById('initial-loader'),
         colorSwatches: document.querySelectorAll('.color-swatch'),
@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cacheStatsTbody: document.getElementById('cache-stats-tbody'),
         topDomainsBody: document.getElementById('top-domains-body'), topClientsBody: document.getElementById('top-clients-body'), slowestQueriesBody: document.getElementById('slowest-queries-body'), topBlockedBody: document.getElementById('top-blocked-body'),
         shuntResultsBody: document.getElementById('shunt-results-body'),
+        upstreamStatsBody: document.getElementById('upstream-stats-body'),
         // 覆盖配置元素
         overridesModule: document.getElementById('overrides-module'),
         overrideSocks5Input: document.getElementById('override-socks5-log'),
@@ -165,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 轻量级请求器 + /metrics 简易缓存，减少同一时段的重复请求
     let __metricsInflight = null; let __metricsStamp = 0;
-    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, getCoreMode: (signal) => api.fetch('/plugins/switch3/show', { signal }), clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getBlockedDomains: (signal, limit = 10) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?domain_set=adguard&limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
+    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, getCoreMode: (signal) => api.fetch('/plugins/switch3/show', { signal }), clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v1: { getUpstreamStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/upstream/stats`, { signal }) }, v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getBlockedDomains: (signal, limit = 10) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?domain_set=adguard&limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
 
     const requeryApi = {
         getConfig: (signal) => api.fetch(`/plugins/requery`, { signal }),
@@ -1717,6 +1718,53 @@ document.addEventListener('DOMContentLoaded', () => {
         return tr;
     }, 'lazy');
 
+    // 上游 DNS 统计：上游名/插件名先转义再拼进 HTML，避免注入
+    const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    // 上游 DNS 卡片：列为 上游（名称 + 插件小字）/ 查询数 / 失败 / 平均耗时
+    // 字段对齐后端 coremain/api_upstream_stats.go 的 upstreamStatsItem：upstream / plugin / queries / errors / avg_ms
+    const renderUpstreamStats = (data) => {
+        const tbody = elements.upstreamStatsBody;
+        if (!tbody) return;
+        const rows = Array.isArray(data) ? data : [];
+        const placeholder = tbody.closest('.card')?.querySelector('.lazy-placeholder');
+        if (placeholder) placeholder.style.display = 'none';
+        if (rows.length === 0) {
+            // 空数组与请求失败共用同一条跨列提示
+            tbody.innerHTML = '<tr class="empty-state-row"><td colspan="4" class="text-muted">暂无上游统计（需给 upstream 配置 tag 并产生查询）</td></tr>';
+            return;
+        }
+        renderTable(tbody, rows, (item) => {
+            const tr = document.createElement('tr');
+            const upstream = String(item?.upstream ?? '');
+            const plugin = String(item?.plugin ?? '');
+            const queries = Number(item?.queries) || 0;
+            const errors = Number(item?.errors) || 0;
+            const avgMs = Number(item?.avg_ms) || 0;
+            // 上游 tag → 友好显示名；未登记的 tag 原样显示
+            const UPSTREAM_DISPLAY_NAMES = {
+                'alidns-223': '阿里 DNS · 223.5.5.5',
+                'alidns-112': '阿里 DNS · 1.12.12.12',
+                'openclash': 'OpenClash（国外出口）',
+                'gateway': '上游网关 · 192.168.2.1'
+            };
+            const displayName = UPSTREAM_DISPLAY_NAMES[upstream] || upstream;
+            // OpenClash 是国外流量的统一出口，其内部再选 Google/Cloudflare 等，这里不可细分
+            const subNote = upstream === 'openclash' ? ' · 含 Google / Cloudflare 等' : '';
+            // 项目没有 .text-danger，失败数大于 0 时用行内 style 上危险色
+            const errorStyle = errors > 0 ? ' style="color: var(--color-danger)"' : '';
+            // 插件名小字灰显，形如 alidns-223 · forward_cn
+            const pluginHtml = plugin ? '<span class="text-muted" style="font-size: 0.8rem;"> · ' + escapeHtml(plugin) + '</span>' : '';
+            const noteHtml = subNote ? '<span class="text-muted" style="font-size: 0.8rem;">' + escapeHtml(subNote) + '</span>' : '';
+            tr.innerHTML = `
+                <td><span class="truncate-text" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</span>${pluginHtml}${noteHtml}</td>
+                <td class="text-right">${queries.toLocaleString()}</td>
+                <td class="text-right"${errorStyle}>${errors.toLocaleString()}</td>
+                <td class="text-right hide-on-mobile">${avgMs.toFixed(1)} ms</td>`;
+            return tr;
+        }, 'lazy');
+    };
+
     const renderSlowestQueries = (data) => renderTable(elements.slowestQueriesBody, data, renderSlowestQueryItemHTML, 'lazy');
 
     const chartColors = ['#6d9dff', '#f778ba', '#2dd4bf', '#fb923c', '#a78bfa', '#fde047', '#ff8c8c', '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#64748b'];
@@ -2788,6 +2836,7 @@ const cacheManager = {
         // 前端优先用本表：后端没升级（仍返回 my_hosts.txt 这种文件名）时 nav 也能显示中文。
         LIST_DISPLAY_NAMES: {
             ddns_hosts: '静态域名映射',
+            blocklist: '黑名单（手动拦截）',
             high_priority_whitelist: '白名单（强制直连）',
             high_priority_greylist: '灰名单（优先代理）',
             geosite_cn: '国内域名集(SRS)',
@@ -2800,6 +2849,7 @@ const cacheManager = {
         // 这里是本项目配置里真实存在的 7 个名单，不能写配置里没有的 tag（点了只会拿到 API 路由表）。
         FALLBACK_PROFILES: [
             { tag: 'ddns_hosts', name: '静态域名映射' },
+            { tag: 'blocklist', name: '黑名单（手动拦截）' },
             { tag: 'high_priority_whitelist', name: '白名单（强制直连）' },
             { tag: 'high_priority_greylist', name: '灰名单（优先代理）' },
             { tag: 'geosite_cn', name: '国内域名集(SRS)' },
@@ -4328,6 +4378,7 @@ const handleInteractiveClick = (e) => {
                         case 'top-clients-card': api.v2.getTopClients(null, 100).then(data => { state.topClients = data || []; renderTopClients(state.topClients); }).catch(console.error); break;
                         case 'slowest-queries-card': api.v2.getSlowest(null, 100).then(data => { state.slowestQueries = data || []; renderSlowestQueries(state.slowestQueries); }).catch(console.error); break;
                         case 'shunt-results-card': api.v2.getDomainSetRank(null, 100).then(data => { state.domainSetRank = data || []; renderDonutChart(state.domainSetRank); }).catch(console.error); break;
+                        case 'upstream-stats-card': api.v1.getUpstreamStats(null).then(data => { state.upstreamStats = data || []; renderUpstreamStats(state.upstreamStats); }).catch(console.error); break;
                     }
                     observer.unobserve(card);
                 }

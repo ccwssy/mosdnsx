@@ -47,6 +47,7 @@ var sourceFileTypes = map[string]bool{
 // 表里没有的 tag（用户自建名单）仍沿用文件名，保持原有语义。
 var listDisplayNames = map[string]string{
 	"ddns_hosts":              "静态域名映射",
+	"blocklist":               "黑名单（手动拦截）",
 	"high_priority_whitelist": "白名单（强制直连）",
 	"high_priority_greylist":  "灰名单（优先代理）",
 	"geosite_cn":              "国内域名集(SRS)",
