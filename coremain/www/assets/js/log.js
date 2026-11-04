@@ -4366,6 +4366,9 @@ const handleInteractiveClick = (e) => {
         watch('#update-module', () => {
             if (state.update.status) {
                 updateManager.updateStatusUI(state.update.status);
+            } else {
+                // 首次进入缓存为空时主动拉取一次，否则定时器 1440 分钟前页面永远显示「检测中」
+                updateManager.refreshStatus(false);
             }
         });
         watch('#feature-switches-module', () => switchManager.loadStatus());
