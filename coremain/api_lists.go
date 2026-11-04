@@ -105,6 +105,9 @@ type ListPluginInfo struct {
 }
 
 // RegisterListsAPI 注册名单枚举接口。
+//
+// 缓存枚举（/api/v1/cache/modules）与名单枚举同属「按配置文件自动发现」的只读
+// 接口，共用这一个注册入口，避免在 mosdns.go 里再加一行注册。
 func RegisterListsAPI(router *chi.Mux) {
 	router.Get("/api/v1/lists", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -112,6 +115,7 @@ func RegisterListsAPI(router *chi.Mux) {
 			mlog.L().Error("failed to encode list plugins", zap.Error(err))
 		}
 	})
+	RegisterCacheAPI(router)
 }
 
 // collectListPlugins 从当前加载的配置里筛出名单型插件。
