@@ -444,6 +444,31 @@
         
         [hidden] { display: none !important; }
         .info-icon { color: var(--color-text-secondary); cursor: help; margin-left: 0.5rem; }
+
+        /* --- T10 渲染重成本单元懒化 --- */
+        /* 表格滚动容器：不在视口内时跳过布局与绘制，降低切 tab 时的一次性渲染成本 */
+        .scrollable-table-container {
+            content-visibility: auto;
+            contain-intrinsic-size: 300px;
+        }
+
+        /* 卡片：布局与样式隔离，卡片内部变化不再波及整页重排 */
+        .card {
+            contain: layout style;
+        }
+
+        /* 打印时恢复完整渲染，保证纸面上内容齐全 */
+        @media print {
+            .scrollable-table-container {
+                content-visibility: visible;
+                contain-intrinsic-size: auto;
+            }
+
+            /* 打印分页时取消布局隔离，避免尺寸/分页计算异常 */
+            .card {
+                contain: none;
+            }
+        }
     </style>
 </head>
 
@@ -1104,9 +1129,39 @@
                                 </div>
                                 <textarea id="list-content-textarea" spellcheck="false"
                                     style="display: none;"></textarea>
-                                <div class="list-mgmt-footer">
+                                <div class="list-mgmt-footer" id="list-mgmt-footer">
                                     <span id="list-content-info"></span>
                                     <button id="list-save-btn" class="button primary"><span>保存</span></button>
+                                </div>
+                                <!-- 数据源管理（sd_set / si_set）：与文本编辑器互斥显示，用于维护 SRS 数据源 -->
+                                <div id="list-source-panel" style="display: none;">
+                                    <div class="rule-actions-wrapper">
+                                        <button id="list-source-add-btn" class="button primary">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                                fill="currentColor">
+                                                <path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z"></path>
+                                            </svg>
+                                            <span>新增数据源</span>
+                                        </button>
+                                    </div>
+                                    <div class="scrollable-table-container" id="list-source-table-container">
+                                        <table id="list-source-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width: 11rem;">名称</th>
+                                                    <th>URL</th>
+                                                    <th class="text-right" style="width: 6rem;">规则数</th>
+                                                    <th style="width: 10rem;">最近更新</th>
+                                                    <th class="text-center" style="width: 5rem;">状态</th>
+                                                    <th class="text-center" style="width: 13rem;">操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="list-source-tbody"></tbody>
+                                        </table>
+                                    </div>
+                                    <p id="list-source-info"
+                                        style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.75rem;">
+                                    </p>
                                 </div>
                                 <p id="list-mgmt-client-ip-hint"
                                     style="display: none; font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 1rem;">

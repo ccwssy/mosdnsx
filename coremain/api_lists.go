@@ -5,11 +5,12 @@ package coremain
 // 面板的「名单管理」需要知道配置里到底有哪些可编辑的名单文件，而不是写死一套
 // tag（作者原始配置的 whitelist/blocklist/... 在官方 mosdns 配置里并不存在）。
 //
-// GET /api/v1/lists 返回配置中所有 domain_set / hosts / ip_set 插件：
-//   [{"tag":"...","name":"my_whitelist.txt","type":"domain_set",
+// GET /api/v1/lists 返回配置中所有 domain_set / hosts / ip_set / sd_set / si_set 插件：
+//   [{"tag":"...","name":"my_whitelist.txt","type":"domain_set","kind":"text",
 //     "files":["..."],"editable":true,"entry_count":28}]
 //
-// editable 表示该类型支持在线编辑（目前只有 domain_set 提供 /show /post /save）。
+// editable 表示该类型支持在线编辑：文本类走 /show + /post，
+// sd_set / si_set 走数据源管理接口（/config、/update）。
 
 import (
 	"encoding/json"
@@ -35,10 +36,36 @@ var listPluginTypes = map[string]bool{
 }
 
 // sourceFileTypes 是文件路径不在 args.files / args.hosts，而在 sources 里的插件类型。
-// 这类插件只读展示（Editable=false），规则请在「在线分流」里维护。
+// 这类插件没有 /post 文本编辑接口，名单内容改由数据源管理接口（/config、/update）维护。
 var sourceFileTypes = map[string]bool{
 	"sd_set": true,
 	"si_set": true,
+}
+
+// listKinds 把插件类型映射成前端渲染用的编辑器类型：
+//
+//	text   —— 文本编辑器（走 /show + /post）
+//	sd_set —— 数据源管理界面（域名类 SRS）
+//	si_set —— 数据源管理界面（IP 类 SRS）
+//
+// 表里没有的类型不下发 kind 字段，前端按 text 处理，保证向后兼容。
+var listKinds = map[string]string{
+	"domain_set":       "text",
+	"domain_set_light": "text",
+	"hosts":            "text",
+	"ip_set":           "text",
+	"sd_set":           "sd_set",
+	"si_set":           "si_set",
+}
+
+// editableListTypes 是支持在线编辑的插件类型：
+// 文本类提供 /show + /post，sd_set / si_set 提供数据源配置接口。
+var editableListTypes = map[string]bool{
+	"domain_set":       true,
+	"domain_set_light": true,
+	"hosts":            true,
+	"sd_set":           true,
+	"si_set":           true,
 }
 
 // listDisplayNames 把已知名单的 tag 映射成中文友好名（面板 nav 直接展示这个字段）。
@@ -48,6 +75,11 @@ var sourceFileTypes = map[string]bool{
 var listDisplayNames = map[string]string{
 	"ddns_hosts":              "静态域名映射",
 	"blocklist":               "黑名单（手动拦截）",
+	"sd_ads":                  "广告拦截(SRS)",
+	"sd_nocn":                 "国外域名集储备(SRS)",
+	"sd_tld":                  "国外TLD储备(SRS)",
+	"si_cn":                   "国内 IP 段(SRS)",
+	"si_private":              "内网 IP 段(SRS)",
 	"high_priority_whitelist": "白名单（强制直连）",
 	"high_priority_greylist":  "灰名单（优先代理）",
 	"geosite_cn":              "国内域名集(SRS)",
@@ -58,9 +90,12 @@ var listDisplayNames = map[string]string{
 
 // ListPluginInfo 描述一个名单型插件。
 type ListPluginInfo struct {
-	Tag      string   `json:"tag"`
-	Name     string   `json:"name"`
-	Type     string   `json:"type"`
+	Tag  string `json:"tag"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	// Kind 是前端渲染用的编辑器类型：text 为文本编辑器，sd_set / si_set 为数据源管理界面。
+	// 未知类型不下发该字段（omitempty），前端按 text 兜底。
+	Kind     string   `json:"kind,omitempty"`
 	Files    []string `json:"files"`
 	Editable bool     `json:"editable"`
 	// Managed 表示这是用户自建名单（data/rule/ 下或以 my_ 开头），
@@ -97,9 +132,10 @@ func collectListPlugins() []ListPluginInfo {
 		info := ListPluginInfo{
 			Tag:      p.Tag,
 			Type:     p.Type,
+			Kind:     listKinds[p.Type],
 			Files:    files,
-			Editable: p.Type == "domain_set" || p.Type == "domain_set_light" || p.Type == "hosts",
-			// sd_set / si_set 的数据源由「在线分流」维护，始终算自建名单。
+			Editable: editableListTypes[p.Type],
+			// sd_set / si_set 的数据源由用户在「名单管理」里维护，始终算自建名单。
 			Managed: sourceFileTypes[p.Type],
 			Name:    p.Tag,
 		}

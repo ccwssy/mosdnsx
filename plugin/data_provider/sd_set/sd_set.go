@@ -67,6 +67,7 @@ type SdSet struct {
 	httpClient      *http.Client
 	ctx             context.Context
 	cancel          context.CancelFunc
+	reloadMu        sync.Mutex // 串行化 updateSourceAsync 的规则重载，避免并发补下载时较旧快照最后落盘而丢掉其它来源的规则
 
 	// 新增：订阅者
 	subscribers []func()
@@ -211,6 +212,25 @@ func newSdSet(bp *coremain.BP, args any) (any, error) {
 	}
 
 	bp.RegAPI(p.api())
+
+	// 启动补下载：本地 srs 文件缺失的启用源立即后台下载，不必等到下一个更新周期
+	p.mu.RLock()
+	missingAtStartup := make([]string, 0)
+	for name, src := range p.sources {
+		if !src.Enabled || src.Files == "" {
+			continue
+		}
+		if _, err := os.Stat(src.Files); err != nil && os.IsNotExist(err) {
+			missingAtStartup = append(missingAtStartup, name)
+		}
+	}
+	p.mu.RUnlock()
+	sort.Strings(missingAtStartup)
+	for _, name := range missingAtStartup {
+		log.Printf("[%s] source '%s' file missing at startup, downloading now.", PluginType, name)
+		go p.updateSourceAsync(name)
+	}
+
 	go p.backgroundUpdater()
 
 	return p, nil
@@ -441,6 +461,24 @@ func (p *SdSet) downloadAndUpdateLocalFile(ctx context.Context, sourceName strin
 	return nil
 }
 
+// updateSourceAsync 在后台下载并更新单个规则源；成功后重载规则并触发 GC，失败只打 ERROR 日志。
+// 启动补下载与手动更新（POST /update/{name}）共用同一逻辑。
+func (p *SdSet) updateSourceAsync(sourceName string) {
+	updateCtx, cancel := context.WithTimeout(p.ctx, downloadTimeout)
+	defer cancel()
+	if err := p.downloadAndUpdateLocalFile(updateCtx, sourceName); err != nil {
+		log.Printf("[%s] ERROR: failed to update source '%s': %v", PluginType, sourceName, err)
+		return
+	}
+	// 串行化重载：后到的重载能看到全部已落盘的文件，避免较旧快照最后落盘
+	p.reloadMu.Lock()
+	defer p.reloadMu.Unlock()
+	if err := p.reloadAllRules(); err != nil {
+		log.Printf("[%s] ERROR: failed to reload rules after updating '%s': %v", PluginType, sourceName, err)
+	}
+	coremain.ManualGC()
+}
+
 func (p *SdSet) backgroundUpdater() {
 	select {
 	case <-time.After(1 * time.Minute):
@@ -567,14 +605,7 @@ func (p *SdSet) api() *chi.Mux {
 		}
 		go func() {
 			log.Printf("[%s] manual update triggered for source '%s'.", PluginType, name)
-			updateCtx, cancel := context.WithTimeout(p.ctx, downloadTimeout)
-			defer cancel()
-			if err := p.downloadAndUpdateLocalFile(updateCtx, name); err != nil {
-				log.Printf("[%s] ERROR: failed to manually update source '%s': %v", PluginType, name, err)
-				return
-			}
-			log.Printf("[%s] manual update for '%s' successful, triggering reload.", PluginType, name)
-			p.reloadAllRules()
+			p.updateSourceAsync(name)
 		}()
 		jsonResponse(w, map[string]string{"message": fmt.Sprintf("update process for '%s' started in the background", name)}, http.StatusAccepted)
 	})

@@ -145,6 +145,12 @@ document.addEventListener('DOMContentLoaded', () => {
         listContentTextArea: document.getElementById('list-content-textarea'),
         listContentInfo: document.getElementById('list-content-info'),
         listSaveBtn: document.getElementById('list-save-btn'),
+        listMgmtFooter: document.getElementById('list-mgmt-footer'),
+        listSourcePanel: document.getElementById('list-source-panel'),
+        listSourceTbody: document.getElementById('list-source-tbody'),
+        listSourceTable: document.getElementById('list-source-table'),
+        listSourceAddBtn: document.getElementById('list-source-add-btn'),
+        listSourceInfo: document.getElementById('list-source-info'),
 	listMgmtRealIPHint: document.getElementById('list-mgmt-realip-hint'),
 	listMgmtCnFakeipFilterHint: document.getElementById('list-mgmt-cnfakeipfilter-hint'),
         listMgmtClientIpHint: document.getElementById('list-mgmt-client-ip-hint'),
@@ -163,6 +169,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const SHUNT_RULE_FLUSH_PATHS = ['top_domains/flush', 'my_fakeiplist/flush', 'my_nodenov4list/flush', 'my_nodenov6list/flush', 'my_notinlist/flush', 'my_nov4list/flush', 'my_nov6list/flush', 'my_realiplist/flush'];
 
     const debounce = (func, wait) => { let timeout; return function executedFunction(...args) { const later = () => { clearTimeout(timeout); func(...args); }; clearTimeout(timeout); timeout = setTimeout(later, wait); }; };
+
+    // 节流：窗口期内最多执行一次，窗口结束时补一次尾调用，保证最后一次状态一定生效
+    const throttle = (func, wait) => {
+        let lastTime = 0;
+        let timer = null;
+        let lastArgs = null;
+        const invoke = (args) => {
+            lastTime = Date.now();
+            timer = null;
+            lastArgs = null;
+            func(...args);
+        };
+        return function throttled(...args) {
+            lastArgs = args;
+            const remain = wait - (Date.now() - lastTime);
+            if (remain <= 0) {
+                if (timer) { clearTimeout(timer); timer = null; }
+                invoke(args);
+            } else if (!timer) {
+                timer = setTimeout(() => invoke(lastArgs), remain);
+            }
+        };
+    };
 
     // 轻量级请求器 + /metrics 简易缓存，减少同一时段的重复请求
     let __metricsInflight = null; let __metricsStamp = 0;
@@ -1394,19 +1423,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!logSearch || !originalContainer || !headerActions || !logQueryTab) return;
 
+        // 先读完所有判断条件（布局属性与 DOM 归属），再统一做 DOM 移动，避免读写交替触发布局抖动
         const isComfortable = document.documentElement.dataset.layout === 'comfortable';
         const isMidDesktop = window.innerWidth <= 1440 && window.innerWidth > CONSTANTS.MOBILE_BREAKPOINT;
+        const moveToHeader = isComfortable && isMidDesktop;
+        const searchInHeader = headerActions.contains(logSearch);
+        const searchInOriginal = originalContainer.contains(logSearch);
 
-        if (isComfortable && isMidDesktop) {
-            if (!headerActions.contains(logSearch)) {
+        if (moveToHeader) {
+            if (!searchInHeader) {
                 headerActions.prepend(logSearch);
                 logQueryTab.classList.add('search-moved-to-header');
             }
-        } else {
-            if (!originalContainer.contains(logSearch)) {
-                originalContainer.prepend(logSearch);
-                logQueryTab.classList.remove('search-moved-to-header');
-            }
+        } else if (!searchInOriginal) {
+            originalContainer.prepend(logSearch);
+            logQueryTab.classList.remove('search-moved-to-header');
         }
     };
 
@@ -1585,10 +1616,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none"><defs><linearGradient id="sparkline-gradient" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="var(--color-accent-primary)" stop-opacity="0.5" /><stop offset="100%" stop-color="var(--color-accent-primary)" stop-opacity="0" /></linearGradient></defs><path d="${fillPathD}" fill="url(#sparkline-gradient)" /><path d="${pathD}" class="sparkline-path" fill="none" /></svg>`;
     };
 
+    // 表格分批渲染：每批插入的行数。单批 60 行，兼顾首屏可见速度与单帧主线程耗时
+    const RENDER_BATCH_SIZE = 60;
+    // 记录每个 tbody 尚未执行的分批帧，新一次渲染开始时取消，避免旧批次继续写 DOM
+    const pendingRenderFrames = new WeakMap();
+
     const renderTable = (tbody, data, renderRow, tableType) => {
         if (!tbody) return;
         const placeholder = tbody.closest('.card')?.querySelector('.lazy-placeholder');
         if (placeholder) placeholder.style.display = 'none';
+        // 渲染代号：新一次渲染开始后，旧代号的剩余批次自动作废，避免新旧数据在同一 tbody 混写
+        const prevFrame = pendingRenderFrames.get(tbody);
+        if (prevFrame !== undefined) {
+            if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(prevFrame);
+            pendingRenderFrames.delete(tbody);
+        }
+        const renderGen = String((parseInt(tbody.dataset.renderGen, 10) || 0) + 1);
+        tbody.dataset.renderGen = renderGen;
         tbody.innerHTML = '';
         if (!data || data.length === 0) {
             let message = '请确保审计功能已开启。';
@@ -1624,17 +1668,47 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.appendChild(emptyRow);
             return;
         }
-        const fragment = document.createDocumentFragment();
-        data.forEach((item, index) => {
+        const buildRow = (item, index) => {
             const row = renderRow(item, index);
             row.classList.add('animate-in');
-            row.style.animationDelay = `${index * 20}ms`;
-            fragment.appendChild(row);
-        });
-        tbody.appendChild(fragment);
+            // 分批渲染时 index 跨批次累计，延迟上限压到 200ms 内，避免尾部行等待过久
+            row.style.animationDelay = `${Math.min(index * 20, 200)}ms`;
+            return row;
+        };
+        // 数据量不超过一批时保持原有的一次性插入路径，不引入 rAF 开销
+        if (data.length <= RENDER_BATCH_SIZE) {
+            const fragment = document.createDocumentFragment();
+            data.forEach((item, index) => fragment.appendChild(buildRow(item, index)));
+            tbody.appendChild(fragment);
+            return;
+        }
+        // 分批追加：首批同步渲染让表格骨架立刻可见，其余批次逐帧追加并让出主线程
+        const appendBatch = (start) => {
+            pendingRenderFrames.delete(tbody);
+            // 代号已变说明有更新的渲染接管了该 tbody，放弃剩余批次
+            if (tbody.dataset.renderGen !== renderGen) return;
+            const end = Math.min(start + RENDER_BATCH_SIZE, data.length);
+            const fragment = document.createDocumentFragment();
+            for (let i = start; i < end; i++) fragment.appendChild(buildRow(data[i], i));
+            tbody.appendChild(fragment);
+            if (end >= data.length) return;
+            if (typeof requestAnimationFrame === 'function') {
+                pendingRenderFrames.set(tbody, requestAnimationFrame(() => appendBatch(end)));
+            } else {
+                appendBatch(end);
+            }
+        };
+        appendBatch(0);
     };
 
     function renderSkeletonRows(tbody, rowCount, colCount) {
+        // 骨架屏同样递增渲染代号，作废同一 tbody 上尚未完成的分批渲染
+        const prevFrame = pendingRenderFrames.get(tbody);
+        if (prevFrame !== undefined) {
+            if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(prevFrame);
+            pendingRenderFrames.delete(tbody);
+        }
+        tbody.dataset.renderGen = String((parseInt(tbody.dataset.renderGen, 10) || 0) + 1);
         tbody.innerHTML = '';
         const fragment = document.createDocumentFragment();
         for (let i = 0; i < rowCount; i++) {
@@ -1799,6 +1873,18 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     let updateController;
+
+    // 卡片级请求信号：同一卡片上一轮请求还没结束就又发起新一轮时，先 abort 上一轮，
+    // 避免两个响应先后到达、把同一张表反复重建（tab 切换/自动刷新叠加时最容易触发）
+    const cardRequestControllers = new Map();
+    const acquireCardSignal = (cardKey) => {
+        const prevController = cardRequestControllers.get(cardKey);
+        if (prevController) { try { prevController.abort(); } catch (_) { } }
+        const controller = new AbortController();
+        cardRequestControllers.set(cardKey, controller);
+        return controller.signal;
+    };
+
     async function updatePageData(forceAll = false) {
         if (state.isUpdating) return;
         state.isUpdating = true;
@@ -1874,7 +1960,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (forceAll) {
                 // 「今日最慢查询」按当日窗口统计：取今天 0 点（本地时区）作为 since
                 const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-                const [topDomainsRes, topClientsRes, slowestRes, topBlockedRes] = await Promise.allSettled([api.v2.getTopDomains(signal, 100), api.v2.getTopClients(signal, 100), api.v2.getSlowest(signal, 100, todayStart.toISOString()), api.v2.getBlockedDomains(signal, 10)]);
+                // 四张排行卡片各用自己的信号：同一卡片若上一轮未完成，先 abort 再发起新一轮
+                const [topDomainsRes, topClientsRes, slowestRes, topBlockedRes] = await Promise.allSettled([
+                    api.v2.getTopDomains(acquireCardSignal('top-domains'), 100),
+                    api.v2.getTopClients(acquireCardSignal('top-clients'), 100),
+                    api.v2.getSlowest(acquireCardSignal('slowest-queries'), 100, todayStart.toISOString()),
+                    api.v2.getBlockedDomains(acquireCardSignal('top-blocked'), 10)
+                ]);
 
                 if (topDomainsRes.status === 'fulfilled') { state.topDomains = topDomainsRes.value || []; renderTopDomains(state.topDomains); }
                 if (topBlockedRes.status === 'fulfilled') { state.topBlocked = topBlockedRes.value || []; renderTopBlocked(state.topBlocked); }
@@ -1902,6 +1994,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let logRequestController;
+    // 日志请求序号：用于判断响应是否已被更新的一次请求接管
+    let logRequestSeq = 0;
 
     // 读取筛选下拉框当前值；元素缺失时返回空串，避免页面结构差异导致取值报错
     function readLogFilterValue(id) { const el = document.getElementById(id); return el ? el.value : ''; }
@@ -1927,7 +2021,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function fetchAndRenderLogs(page = 1, append = false) {
-        if (state.isLogLoading && !append) return;
+        // 追加加载（滚动到底）时避免重复请求；整页刷新则先 abort 上一轮再发起新一轮，
+        // 保证切 tab / 改筛选后只有最新一次请求的结果会写回表格
+        if (append && state.isLogLoading) return;
+        const requestSeq = ++logRequestSeq;
         state.isLogLoading = true;
         if (elements.logLoader) elements.logLoader.style.display = 'block';
         if (!append) renderSkeletonRows(elements.logTableBody, Math.min(20, CONSTANTS.LOGS_PER_PAGE), state.isMobile ? 1 : 5);
@@ -1941,6 +2038,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await api.v2.getLogs(logRequestController.signal, params);
             if (!response?.pagination) throw new Error("Invalid response from logs API");
+            // 已有更新的一次请求接管时，旧响应直接丢弃，不再重建表格
+            if (requestSeq !== logRequestSeq) return;
             const { pagination, logs } = response;
             state.logPaginationInfo = pagination;
             state.currentLogPage = pagination.current_page;
@@ -1948,7 +2047,13 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.renderLogTable(logs || [], append);
         } catch (error) {
             if (error.name !== 'AbortError') { console.error("Failed to fetch logs:", error); ui.showToast('获取日志失败', 'error'); }
-        } finally { state.isLogLoading = false; if (elements.logLoader) elements.logLoader.style.display = 'none'; }
+        } finally {
+            // 只有最新一次请求结束才收起加载态，避免旧请求提前把 loading 清掉
+            if (requestSeq === logRequestSeq) {
+                state.isLogLoading = false;
+                if (elements.logLoader) elements.logLoader.style.display = 'none';
+            }
+        }
     }
 
     const tableSorter = {
@@ -2269,11 +2374,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleResize() {
+        // 先一次性读完所需的布局信息，再统一写 DOM，避免读写交替触发同步重排
         const wasMobile = state.isMobile;
-        state.isMobile = window.innerWidth <= CONSTANTS.MOBILE_BREAKPOINT;
+        const nextIsMobile = window.innerWidth <= CONSTANTS.MOBILE_BREAKPOINT;
+        const activeTab = document.querySelector('.tab-link.active')?.dataset.tab;
+        const domainModule = document.getElementById('domain-stats-module');
+        const gridContainer = domainModule ? domainModule.parentElement : null;
+        // 布局模式与宽度判断合并到读取阶段，写入阶段不再读取计算样式
+        const useWideGrid = !!(gridContainer && window.innerWidth > 1200 && window.getComputedStyle(gridContainer).display === 'grid');
+
+        state.isMobile = nextIsMobile;
 
         if (wasMobile !== state.isMobile) {
-            const activeTab = document.querySelector('.tab-link.active')?.dataset.tab;
             if (activeTab === 'log-query') {
                 ui.renderLogTable(state.displayedLogs);
             } else if (activeTab === 'overview') {
@@ -2296,18 +2408,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // -- [修改] -- 动态调整系统控制页的列宽比例
         // 目标：增加"域名列表统计"宽度，减小"版本与更新"宽度
-        const domainModule = document.getElementById('domain-stats-module');
-        if (domainModule) {
-            const gridContainer = domainModule.parentElement;
-            // 仅在 Grid 布局且非移动端堆叠模式下调整 (通常阈值是 1200px 或 1024px)
-            if (gridContainer && window.getComputedStyle(gridContainer).display === 'grid' && window.innerWidth > 1200) {
-                // 原比例通常是 1fr 1fr 1fr
-                // 调整为: 域名统计(1.3倍) - 系统信息(1倍) - 版本更新(0.8倍)
-                gridContainer.style.gridTemplateColumns = '1.3fr 1fr 0.8fr';
-            } else if (gridContainer) {
-                // 屏幕较窄或移动端时，清除内联样式，回归 CSS 默认的响应式布局
-                gridContainer.style.gridTemplateColumns = '';
-            }
+        // 仅在 Grid 布局且非移动端堆叠模式下调整 (通常阈值是 1200px 或 1024px)；
+        // 判断结果已在读取阶段算好，这里只写样式，不再读计算样式
+        if (gridContainer) {
+            // 比例为: 域名统计(1.3倍) - 系统信息(1倍) - 版本更新(0.8倍)；屏幕较窄时清除内联样式，回归 CSS 响应式布局
+            gridContainer.style.gridTemplateColumns = useWideGrid ? '1.3fr 1fr 0.8fr' : '';
         }
     }
 
@@ -2843,12 +2948,17 @@ const cacheManager = {
         LIST_DISPLAY_NAMES: {
             ddns_hosts: '静态域名映射',
             blocklist: '黑名单（手动拦截）',
+            sd_nocn: '国外域名集储备(SRS)',
+            sd_tld: '国外TLD储备(SRS)',
             high_priority_whitelist: '白名单（强制直连）',
             high_priority_greylist: '灰名单（优先代理）',
             geosite_cn: '国内域名集(SRS)',
             geosite_gfw: '国外域名集',
             geoip_cn: '国内 IP 段',
-            geoip_private: '内网 IP 段'
+            geoip_private: '内网 IP 段',
+            sd_ads: '广告拦截(SRS)',
+            si_cn: '国内 IP 段(SRS)',
+            si_private: '内网 IP 段(SRS)'
         },
         // FALLBACK_PROFILES 是兜底名单：/api/v1/lists 请求失败、返回非数组或空数组时回退到这里，
         // 保证左侧 nav 不会空白、页面照常可用；正常情况下一律使用接口返回的 tag。
@@ -2856,15 +2966,22 @@ const cacheManager = {
         FALLBACK_PROFILES: [
             { tag: 'ddns_hosts', name: '静态域名映射' },
             { tag: 'blocklist', name: '黑名单（手动拦截）' },
+            { tag: 'sd_nocn', name: '国外域名集储备(SRS)' },
+            { tag: 'sd_tld', name: '国外TLD储备(SRS)' },
             { tag: 'high_priority_whitelist', name: '白名单（强制直连）' },
             { tag: 'high_priority_greylist', name: '灰名单（优先代理）' },
-            { tag: 'geosite_cn', name: '国内域名集(SRS)' },
+            { tag: 'geosite_cn', name: '国内域名集(SRS)', kind: 'sd_set' },
             { tag: 'geosite_gfw', name: '国外域名集' },
             { tag: 'geoip_cn', name: '国内 IP 段' },
             { tag: 'geoip_private', name: '内网 IP 段' }
         ],
         // profiles 是当前生效的名单条目（接口返回优先，失败时为兜底名单）；editable 为 false 的条目只读。
         profiles: [],
+        // sources 是当前 sd_set / si_set 名单的数据源列表；editingSource 是正在行内编辑的数据源名，
+        // 取 NEW_SOURCE_KEY 时表示「新增数据源」。两者只供数据源管理界面使用。
+        sources: [],
+        editingSource: null,
+        NEW_SOURCE_KEY: '__new__',
         // readonlyHint 是懒创建的只读提示节点：log.html 里没有对应元素，改由脚本生成。
         readonlyHint: null,
 
@@ -2883,6 +3000,14 @@ const cacheManager = {
                 this.loadList(tag);
             });
             elements.listSaveBtn.addEventListener('click', () => this.saveList());
+            // 数据源管理（sd_set / si_set）的事件统一委托到面板容器：表格行和行内表单都是动态生成的
+            if (elements.listSourceAddBtn) {
+                elements.listSourceAddBtn.addEventListener('click', () => this.openSourceForm(''));
+            }
+            if (elements.listSourcePanel) {
+                elements.listSourcePanel.addEventListener('click', e => this.handleSourceClick(e));
+                elements.listSourcePanel.addEventListener('submit', e => this.handleSourceSubmit(e));
+            }
             // 先用兜底名单渲染 nav 占位，再异步拉取真实名单覆盖，保证左侧栏不会长时间空白
             this.renderNav(this.FALLBACK_PROFILES);
             this.initNav();
@@ -2905,7 +3030,9 @@ const cacheManager = {
                                 // 优先用前端映射表：后端返回的 name 可能还是 my_hosts.txt 这种文件名；
                                 // 映射不到才用后端 name，后端也没给就退回 tag。
                                 name: this.LIST_DISPLAY_NAMES[item.tag] || item.name || item.tag,
-                                editable: item.editable !== false
+                                editable: item.editable !== false,
+                                // kind 决定右侧渲染哪种编辑器：sd_set / si_set 是数据源管理，其余按文本编辑器
+                                kind: item.kind || 'text'
                             }));
                     }
                 }
@@ -2981,6 +3108,288 @@ const cacheManager = {
             return hint;
         },
 
+        // isDataSourceKind 判断名单类型是否使用数据源管理界面（sd_set 与 si_set 的字段结构相同）。
+        isDataSourceKind(kind) {
+            return kind === 'sd_set' || kind === 'si_set';
+        },
+
+        // esc 转义写入 innerHTML 的文本，避免数据源名称/URL 里的特殊字符破坏表格结构。
+        esc(value) {
+            return String(value ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+        },
+
+        // formatSourceTime 把后端 RFC3339 时间转成本地时间文本，零值（从未更新）显示破折号。
+        formatSourceTime(value) {
+            if (!value || String(value).startsWith('0001-01-01')) return '—';
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return '—';
+            return date.toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+        },
+
+        // showTextView 切回文本编辑器：隐藏数据源面板，恢复底部信息与保存按钮。
+        showTextView() {
+            if (elements.listSourcePanel) elements.listSourcePanel.style.display = 'none';
+            if (elements.listMgmtFooter) elements.listMgmtFooter.style.display = 'flex';
+            this.editingSource = null;
+            this.sources = [];
+        },
+
+        // showSourceView 切到数据源管理界面：隐藏文本编辑器、底部保存区和各类提示，再加载数据源列表。
+        showSourceView(tag) {
+            // 中断可能在途的 /show 请求，避免它的 finally 把文本编辑器重新显示出来
+            try { this._abortController?.abort(); } catch (_) { }
+            this._abortController = null;
+            if (elements.listContentLoader) elements.listContentLoader.style.display = 'none';
+            elements.listContentTextArea.style.display = 'none';
+            elements.listContentTextArea.value = '';
+            if (elements.listMgmtFooter) elements.listMgmtFooter.style.display = 'none';
+            elements.listContentInfo.textContent = '';
+            [elements.listMgmtClientIpHint, elements.listMgmtDirectIpHint, elements.listMgmtNFTIpHint,
+                elements.listMgmtRewriteHint, elements.listMgmtRealIPHint, elements.listMgmtCnFakeipFilterHint]
+                .forEach(hint => { if (hint) hint.style.display = 'none'; });
+            if (elements.listSourcePanel) elements.listSourcePanel.style.display = 'block';
+            this.loadSources(tag);
+        },
+
+        // requestSourceApi 调用数据源接口：非 2xx 由 api.fetch 统一 toast 报错；
+        // 插件没注册对应路由时后端回 200 + 「Invalid request」路由表，这里转成异常并提示。
+        async requestSourceApi(url, options) {
+            const data = await api.fetch(url, options);
+            if (typeof data === 'string' && this.isApiErrorBody(data)) {
+                ui.showToast('该名单不支持数据源管理，请确认插件已启用', 'error');
+                throw new Error('API 路由表');
+            }
+            return data;
+        },
+
+        // reportSourceError 只在 api.fetch 没弹过 toast 时补一条提示，避免同一个错误弹两次。
+        reportSourceError(error, message) {
+            const text = String(error?.message || '');
+            if (text === 'API 路由表' || text.indexOf('API Error') === 0) return;
+            ui.showToast(message, 'error');
+        },
+
+        // loadSources 拉取数据源列表并渲染；响应回来时名单已切换就丢弃，避免切换过快时串数据。
+        async loadSources(tag) {
+            this.editingSource = null;
+            this.sources = [];
+            const tbody = elements.listSourceTbody;
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center">正在加载数据源...</td></tr>';
+            if (elements.listSourceInfo) elements.listSourceInfo.textContent = '';
+            try {
+                const data = await this.requestSourceApi(`/plugins/${encodeURIComponent(tag)}/config`);
+                if (tag !== this.currentTag) return;
+                this.sources = Array.isArray(data) ? data.filter(src => src && src.name) : [];
+                this.renderSources();
+                if (elements.listSourceInfo) {
+                    elements.listSourceInfo.textContent = `共 ${this.sources.length} 个数据源，保存后插件会自动热重载。`;
+                }
+            } catch (error) {
+                if (tag !== this.currentTag) return;
+                if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center">数据源加载失败</td></tr>';
+                if (elements.listSourceInfo) {
+                    elements.listSourceInfo.textContent = `加载失败：${error?.message || '网络错误'}`;
+                }
+                console.error(`读取数据源「${tag}」失败:`, error);
+            }
+        },
+
+        // renderSources 重建数据源表格；正在编辑的行（含新增）在对应位置插入行内表单。
+        renderSources() {
+            const tbody = elements.listSourceTbody;
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            // 新增数据源的表单置顶，便于直接填写
+            if (this.editingSource === this.NEW_SOURCE_KEY) tbody.appendChild(this.buildSourceFormRow(null));
+            if (this.sources.length === 0) {
+                if (this.editingSource !== this.NEW_SOURCE_KEY) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center">暂无数据源，点击「新增数据源」添加</td></tr>';
+                }
+                return;
+            }
+            this.sources.forEach(source => {
+                tbody.appendChild(this.buildSourceRow(source));
+                // 编辑态：表单插在被编辑行的下一行
+                if (this.editingSource === source.name) tbody.appendChild(this.buildSourceFormRow(source));
+            });
+        },
+
+        // buildSourceRow 渲染一行数据源：名称 / URL / 规则数 / 最近更新 / 状态 / 操作。
+        buildSourceRow(source) {
+            const tr = document.createElement('tr');
+            tr.dataset.sourceName = source.name;
+            const url = source.url || '';
+            const status = source.enabled
+                ? '<span class="response-tag noerror">启用</span>'
+                : '<span class="response-tag other">停用</span>';
+            tr.innerHTML = `<td><span class="truncate-text" title="${this.esc(source.name)}">${this.esc(source.name)}</span></td>
+                <td><span class="truncate-text" title="${this.esc(url)}">${this.esc(url)}</span></td>
+                <td class="text-right">${(source.rule_count || 0).toLocaleString()}</td>
+                <td>${this.formatSourceTime(source.last_updated)}</td>
+                <td class="text-center">${status}</td>
+                <td class="text-center">
+                    <div style="display: inline-flex; gap: 0.5rem; white-space: nowrap;">
+                        <button class="button secondary source-edit-btn" style="padding: 0.4rem 0.8rem;"><span>编辑</span></button>
+                        <button class="button secondary source-update-btn" style="padding: 0.4rem 0.8rem;"><span>立即更新</span></button>
+                        <button class="button danger source-delete-btn" style="padding: 0.4rem 0.8rem;"><span>删除</span></button>
+                    </div>
+                </td>`;
+            return tr;
+        },
+
+        // buildSourceFormRow 渲染行内编辑表单；source 为 null 表示新增数据源（名称可填且必填）。
+        buildSourceFormRow(source) {
+            const isNew = !source;
+            // 新增时给一份默认值，和后端 RuleSource 的零值语义保持一致
+            const src = source || {
+                name: '', type: 'srs', files: '', url: '',
+                enabled: true, enable_regexp: false, auto_update: true, update_interval_hours: 24
+            };
+            const tr = document.createElement('tr');
+            tr.className = 'source-form-row';
+            const labelStyle = 'display: flex; flex-direction: column; gap: 0.25rem;';
+            const hintStyle = 'font-size: 0.85rem; color: var(--color-text-secondary);';
+            tr.innerHTML = `<td colspan="6">
+                <form class="source-form" novalidate>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;">
+                        <label style="${labelStyle} flex: 1 1 12rem;">
+                            <span style="${hintStyle}">名称</span>
+                            <input name="name" value="${this.esc(src.name)}" ${isNew ? '' : 'readonly'} required>
+                        </label>
+                        <label style="${labelStyle} flex: 2 1 20rem;">
+                            <span style="${hintStyle}">URL</span>
+                            <input name="url" value="${this.esc(src.url)}" placeholder="https://.../name.srs" required>
+                        </label>
+                        <label style="${labelStyle} flex: 2 1 20rem;">
+                            <span style="${hintStyle}">本地文件</span>
+                            <input name="files" value="${this.esc(src.files)}" placeholder="/etc/mosdns/data/name.srs" required>
+                        </label>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-top: 0.75rem;">
+                        <label style="display: flex; align-items: center; gap: 0.4rem;">
+                            <input type="checkbox" name="enabled" ${src.enabled ? 'checked' : ''}> <span>启用</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.4rem;">
+                            <input type="checkbox" name="auto_update" ${src.auto_update ? 'checked' : ''}> <span>自动更新</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.4rem;">
+                            <span>更新间隔(小时)</span>
+                            <input type="number" name="update_interval_hours" min="1" step="1"
+                                value="${src.update_interval_hours || 24}" style="width: 6rem;">
+                        </label>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                        <button type="submit" class="button primary" style="padding: 0.4rem 0.9rem;"><span>保存</span></button>
+                        <button type="button" class="button secondary source-cancel-btn" style="padding: 0.4rem 0.9rem;"><span>取消</span></button>
+                    </div>
+                </form>
+            </td>`;
+            return tr;
+        },
+
+        // openSourceForm 打开行内表单：传数据源名表示编辑，传空串表示新增，传 null 表示收起表单。
+        openSourceForm(name) {
+            if (!this.currentTag) return;
+            if (name === null) this.editingSource = null;
+            else if (name === '') this.editingSource = this.NEW_SOURCE_KEY;
+            else this.editingSource = name;
+            this.renderSources();
+        },
+
+        // handleSourceClick 处理表格行和行内表单里的按钮：编辑 / 立即更新 / 删除 / 取消。
+        handleSourceClick(event) {
+            const button = event.target.closest('button');
+            if (!button || !this.currentTag) return;
+            const row = button.closest('[data-source-name]');
+            const name = row ? row.dataset.sourceName : '';
+            if (button.classList.contains('source-edit-btn') && name) this.openSourceForm(name);
+            else if (button.classList.contains('source-update-btn') && name) this.updateSource(button, name);
+            else if (button.classList.contains('source-delete-btn') && name) this.deleteSource(button, name);
+            else if (button.classList.contains('source-cancel-btn')) this.openSourceForm(null);
+        },
+
+        // handleSourceSubmit 保存行内表单：新增和编辑都走 PUT /plugins/{tag}/config/{name}。
+        async handleSourceSubmit(event) {
+            const form = event.target.closest('form.source-form');
+            if (!form || !this.currentTag) return;
+            event.preventDefault();
+            const tag = this.currentTag;
+            const isNew = this.editingSource === this.NEW_SOURCE_KEY;
+            const name = (form.elements['name'].value || '').trim();
+            const url = (form.elements['url'].value || '').trim();
+            const files = (form.elements['files'].value || '').trim();
+            if (!name) {
+                ui.showToast('数据源名称不能为空', 'error');
+                return;
+            }
+            if (!url || !files) {
+                ui.showToast('URL 与本地文件均为必填', 'error');
+                return;
+            }
+            const existing = this.sources.find(src => src.name === name);
+            // 提交的是整个 RuleSource：type / enable_regexp 表单里没有对应输入，沿用原值避免被覆盖成空
+            const payload = {
+                name,
+                type: (existing && existing.type) || 'srs',
+                files,
+                url,
+                enabled: form.elements['enabled'].checked,
+                enable_regexp: !!(existing && existing.enable_regexp),
+                auto_update: form.elements['auto_update'].checked,
+                update_interval_hours: parseInt(form.elements['update_interval_hours'].value, 10) || 24
+            };
+            const saveBtn = form.querySelector('button[type="submit"]');
+            ui.setLoading(saveBtn, true);
+            try {
+                await this.requestSourceApi(`/plugins/${encodeURIComponent(tag)}/config/${encodeURIComponent(name)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                ui.showToast(`数据源「${name}」已${isNew ? '添加' : '保存'}`, 'success');
+                this.editingSource = null;
+                if (this.currentTag === tag) await this.loadSources(tag);
+            } catch (error) {
+                console.error(`保存数据源「${name}」失败:`, error);
+                this.reportSourceError(error, `保存数据源「${name}」失败`);
+            } finally {
+                ui.setLoading(saveBtn, false);
+            }
+        },
+
+        // updateSource 手动触发下载：后端后台执行并回 202，5 秒后重新拉配置刷新规则数与更新时间。
+        async updateSource(button, name) {
+            const tag = this.currentTag;
+            ui.setLoading(button, true);
+            try {
+                await this.requestSourceApi(`/plugins/${encodeURIComponent(tag)}/update/${encodeURIComponent(name)}`, { method: 'POST' });
+                ui.showToast('后台更新中', 'success');
+                setTimeout(() => { if (this.currentTag === tag) this.loadSources(tag); }, 5000);
+            } catch (error) {
+                console.error(`触发数据源「${name}」更新失败:`, error);
+                this.reportSourceError(error, `触发数据源「${name}」更新失败`);
+            } finally {
+                ui.setLoading(button, false);
+            }
+        },
+
+        // deleteSource 删除数据源：后端会同时删掉本地 srs 文件。
+        async deleteSource(button, name) {
+            const tag = this.currentTag;
+            if (!confirm(`确定要删除数据源「${name}」吗？本地 srs 文件会一并删除。`)) return;
+            ui.setLoading(button, true);
+            try {
+                await this.requestSourceApi(`/plugins/${encodeURIComponent(tag)}/config/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                ui.showToast(`数据源「${name}」已删除`, 'success');
+                if (this.currentTag === tag) await this.loadSources(tag);
+            } catch (error) {
+                console.error(`删除数据源「${name}」失败:`, error);
+                this.reportSourceError(error, `删除数据源「${name}」失败`);
+            } finally {
+                ui.setLoading(button, false);
+            }
+        },
+
         async loadList(tag) {
             // 入口处同样的保护：tag 不在集合内直接 return，不发请求、不改状态
             if (!this.hasProfile(tag)) {
@@ -2988,6 +3397,15 @@ const cacheManager = {
                 return;
             }
             this.currentTag = tag;
+            elements.listMgmtNav.querySelectorAll('.list-mgmt-link').forEach(l => l.classList.toggle('active', l.dataset.listTag === tag));
+            // 数据源类名单（sd_set / si_set）渲染数据源管理界面：不请求 /show，也不显示文本编辑器
+            const currentProfile = this.profiles.find(item => item.tag === tag);
+            if (currentProfile && this.isDataSourceKind(currentProfile.kind)) {
+                this.showSourceView(tag);
+                return;
+            }
+            // 文本类名单：从数据源界面切回来时恢复文本编辑器与底部保存区
+            this.showTextView();
             // 先按条目的 editable 锁定输入框与保存按钮，避免只读名单在加载期间仍可编辑
             this.applyListEditable(tag);
             // Abort any previous in-flight request and reset textarea to avoid old content persisting
@@ -2996,7 +3414,6 @@ const cacheManager = {
             // Clear previous content so switching lists reflects immediately
             elements.listContentTextArea.value = '';
             elements.listContentTextArea.scrollTop = 0;
-            elements.listMgmtNav.querySelectorAll('.list-mgmt-link').forEach(l => l.classList.toggle('active', l.dataset.listTag === tag));
 
             elements.listMgmtClientIpHint.style.display = (tag === 'client_ip') ? 'block' : 'none';
             if (elements.listMgmtDirectIpHint) {
@@ -3118,7 +3535,11 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                 }
             } finally {
                 elements.listContentLoader.style.display = 'none';
-                elements.listContentTextArea.style.display = 'block';
+                // 期间若已切到数据源管理界面，就不能再恢复文本编辑器，否则两个界面会同时显示
+                const activeProfile = this.profiles.find(item => item.tag === this.currentTag);
+                if (!activeProfile || !this.isDataSourceKind(activeProfile.kind)) {
+                    elements.listContentTextArea.style.display = 'block';
+                }
                 ui.setLoading(elements.listSaveBtn, false);
                 // 加载结束后按条目重新应用只读状态：上面的 setLoading(false) 会把 disabled 重置为可点
                 this.applyListEditable(this.currentTag);
@@ -3128,9 +3549,9 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
 
         async saveList() {
             if (!this.currentTag) return;
-            // 只读条目（editable 为 false）不提交保存，避免对 sd_set/si_set 之类的插件发 POST
+            // 只读条目（editable 为 false）不提交保存；数据源类名单改由数据源管理界面写 PUT，绝不发 /post
             const profile = this.profiles.find(item => item.tag === this.currentTag);
-            if (profile && profile.editable === false) return;
+            if (profile && (profile.editable === false || this.isDataSourceKind(profile.kind))) return;
             ui.setLoading(elements.listSaveBtn, true);
             try {
                 const values = elements.listContentTextArea.value.split('\n').map(s => s.trim()).filter(Boolean);
@@ -4076,7 +4497,8 @@ async handleSave(formData) {
         if (elements.overridesLoadBtn) elements.overridesLoadBtn.addEventListener('click', () => overridesManager.load(false));
         if (elements.overridesSaveBtn) elements.overridesSaveBtn.addEventListener('click', () => overridesManager.save());
         window.addEventListener('popstate', () => { const hash = window.location.hash || '#overview'; const targetLink = document.querySelector(`.tab-link[href="${hash}"]`); handleNavigation(targetLink || elements.tabLinks[0]); });
-        window.addEventListener('resize', debounce(handleResize, 150));
+        // 窗口尺寸变化：节流 100ms（trailing 补一次，保证最后一次尺寸生效），passive 声明不阻止默认行为
+        window.addEventListener('resize', throttle(handleResize, 100), { passive: true });
         elements.globalRefreshBtn?.addEventListener('click', () => updatePageData(true));
         setInterval(updateLastUpdated, 5000);
         [elements.autoRefreshToggle, elements.autoRefreshIntervalInput].forEach(el => el && el.addEventListener('change', () => { const enabled = elements.autoRefreshToggle.checked; elements.autoRefreshIntervalInput.disabled = !enabled; autoRefreshManager.updateSettings(enabled, parseInt(elements.autoRefreshIntervalInput.value, 10) || 15); }));
@@ -4135,8 +4557,17 @@ async handleSave(formData) {
             }
         });
 
+        // 搜索框连续键入：300ms 防抖后才触发一次查询，避免每个字符都重建表格；分页按钮点击本身低频，保持立即响应
         elements.logSearch?.addEventListener('input', debounce(applyLogFilterAndRender, 300));
-        elements.logQueryTableContainer?.addEventListener('scroll', () => { const { scrollTop, scrollHeight, clientHeight } = elements.logQueryTableContainer; if (clientHeight + scrollTop >= scrollHeight - 200) loadMoreLogs(); }, { passive: true });
+        // 日志表格滚动到底部附近自动加载下一页：节流 100ms（trailing 保证最后一次滚动状态生效）
+        const handleLogTableScroll = throttle(() => {
+            const container = elements.logQueryTableContainer;
+            if (!container) return;
+            // 一次读完所需的三个布局属性，避免滚动中反复触发同步重排
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            if (clientHeight + scrollTop >= scrollHeight - 200) loadMoreLogs();
+        }, 100);
+        elements.logQueryTableContainer?.addEventListener('scroll', handleLogTableScroll, { passive: true });
 
 const handleInteractiveClick = (e) => {
             const interactiveButton = e.target.closest('.copy-btn, .filter-btn');
@@ -4373,19 +4804,23 @@ const handleInteractiveClick = (e) => {
     }
 
     function setupLazyLoading() {
+        // 卡片请求统一错误处理：被新一轮请求 abort 掉的旧请求不是错误，不进 console
+        const ignoreAbort = (err) => { if (err && err.name !== 'AbortError') console.error(err); };
         const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     const card = entry.target;
                     const cardId = card.id;
+                    // 每个卡片用自己的信号：懒加载与刷新路径共用同一个 cardKey，后发起的请求先作废前一个，
+                    // 避免同一张表收到两次响应后连续重建
                     switch (cardId) {
-                        case 'top-domains-card': api.v2.getTopDomains(null, 100).then(data => { state.topDomains = data || []; renderTopDomains(state.topDomains); }).catch(console.error); break;
-                        case 'top-blocked-card': api.v2.getBlockedDomains(null, 10).then(data => { state.topBlocked = data || []; renderTopBlocked(state.topBlocked); }).catch(console.error); break;
-                        case 'top-clients-card': api.v2.getTopClients(null, 100).then(data => { state.topClients = data || []; renderTopClients(state.topClients); }).catch(console.error); break;
+                        case 'top-domains-card': api.v2.getTopDomains(acquireCardSignal('top-domains'), 100).then(data => { state.topDomains = data || []; renderTopDomains(state.topDomains); }).catch(ignoreAbort); break;
+                        case 'top-blocked-card': api.v2.getBlockedDomains(acquireCardSignal('top-blocked'), 10).then(data => { state.topBlocked = data || []; renderTopBlocked(state.topBlocked); }).catch(ignoreAbort); break;
+                        case 'top-clients-card': api.v2.getTopClients(acquireCardSignal('top-clients'), 100).then(data => { state.topClients = data || []; renderTopClients(state.topClients); }).catch(ignoreAbort); break;
                         // 懒加载同样取今日 0 点作为 since，与刷新路径保持一致
-                        case 'slowest-queries-card': { const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); api.v2.getSlowest(null, 100, todayStart.toISOString()).then(data => { state.slowestQueries = data || []; renderSlowestQueries(state.slowestQueries); }).catch(console.error); break; }
-                        case 'shunt-results-card': api.v2.getDomainSetRank(null, 100).then(data => { state.domainSetRank = data || []; renderDonutChart(state.domainSetRank); }).catch(console.error); break;
-                        case 'upstream-stats-card': api.v1.getUpstreamStats(null).then(data => { state.upstreamStats = data || []; renderUpstreamStats(state.upstreamStats); }).catch(console.error); break;
+                        case 'slowest-queries-card': { const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0); api.v2.getSlowest(acquireCardSignal('slowest-queries'), 100, todayStart.toISOString()).then(data => { state.slowestQueries = data || []; renderSlowestQueries(state.slowestQueries); }).catch(ignoreAbort); break; }
+                        case 'shunt-results-card': api.v2.getDomainSetRank(acquireCardSignal('shunt-results'), 100).then(data => { state.domainSetRank = data || []; renderDonutChart(state.domainSetRank); }).catch(ignoreAbort); break;
+                        case 'upstream-stats-card': api.v1.getUpstreamStats(acquireCardSignal('upstream-stats')).then(data => { state.upstreamStats = data || []; renderUpstreamStats(state.upstreamStats); }).catch(ignoreAbort); break;
                     }
                     observer.unobserve(card);
                 }
