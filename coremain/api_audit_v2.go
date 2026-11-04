@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/IrineSistiana/mosdns/v5/mlog"
 	"github.com/go-chi/chi/v5"
@@ -109,7 +110,23 @@ func handleV2GetDomainSetRank(w http.ResponseWriter, r *http.Request) {
 // 5. Handler for: Get slowest queries
 func handleV2GetSlowestQueries(w http.ResponseWriter, r *http.Request) {
 	limit := parseQueryInt(r, "limit", 100) // Default to 100 slowest
-	logs := GlobalAuditCollector.GetSlowestQueries(limit)
+	if limit > 500 {                        // 上限 500，避免一次拉取过多
+		limit = 500
+	}
+
+	var logs []AuditLog
+	// since 为可选的 RFC3339 时间窗口起点（如 2026-11-04T00:00:00+08:00）。
+	// 留空或解析失败时保持原有行为（读 7 天历史榜），保证向后兼容。
+	if sinceStr := r.URL.Query().Get("since"); sinceStr != "" {
+		if since, err := time.Parse(time.RFC3339, sinceStr); err == nil {
+			logs = GlobalAuditCollector.GetSlowestQueriesSince(since, limit)
+		} else {
+			logs = GlobalAuditCollector.GetSlowestQueries(limit)
+		}
+	} else {
+		logs = GlobalAuditCollector.GetSlowestQueries(limit)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(logs); err != nil {
 		mlog.L().Error("failed to encode v2 slowest queries", zap.Error(err))

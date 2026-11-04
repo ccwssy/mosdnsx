@@ -897,6 +897,46 @@ func (c *AuditCollector) GetSlowestQueries(limit int) []AuditLog {
 	return snapshot
 }
 
+// GetSlowestQueriesSince 返回 since 之后的最慢 limit 条查询（按耗时降序）。
+// 与 GetSlowestQueries 的区别：不复用全局 slowestQueries 堆（那是 7 天历史榜），
+// 而是遍历内存环形日志按时间过滤后做 partial top-N。
+func (c *AuditCollector) GetSlowestQueriesSince(since time.Time, limit int) []AuditLog {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if limit <= 0 || len(c.logs) == 0 {
+		return []AuditLog{}
+	}
+
+	// 容量 limit 的最小堆，堆顶为当前候选里最慢的一条；
+	// 判定条件与 processBatch 里 slowestQueries 的维护方式保持一致。
+	h := make(slowestQueryHeap, 0, limit)
+	for i := range c.logs {
+		log := c.logs[i]
+		// 环形数组的物理顺序与时间无关，这里只按时间窗口过滤
+		if log.QueryTime.Before(since) {
+			continue
+		}
+		if len(h) < limit {
+			heap.Push(&h, log)
+		} else if log.DurationMs > h[0].DurationMs {
+			h[0] = log
+			heap.Fix(&h, 0)
+		}
+	}
+
+	if len(h) == 0 {
+		return []AuditLog{}
+	}
+
+	result := make([]AuditLog, len(h))
+	copy(result, h)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].DurationMs > result[j].DurationMs
+	})
+	return result
+}
+
 // 零内存分配的极速 ASCII 忽略大小写匹配函数
 func containsFold(s, substrLower string) bool {
 	if len(substrLower) == 0 {
