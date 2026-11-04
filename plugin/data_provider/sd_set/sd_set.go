@@ -62,6 +62,7 @@ type SdSet struct {
 	mu      sync.RWMutex // mu 保护 sources map 和相关的配置文件写入
 	sources map[string]*RuleSource
 
+	tag             string // 插件 tag，用于 show 接口摘要头
 	localConfigFile string
 	httpClient      *http.Client
 	ctx             context.Context
@@ -89,6 +90,22 @@ type ruleCollector struct {
 
 func (c *ruleCollector) Add(s string, _ struct{}) error {
 	c.rules = append(c.rules, s)
+	return nil
+}
+
+// showRuleLimit 是 show 接口最多输出的规则行数，避免整集全吐
+const showRuleLimit = 200
+
+// boundedRuleCollector 实现 RuleReceiver，只保留前 limit 条规则文本
+type boundedRuleCollector struct {
+	limit int
+	rules []string
+}
+
+func (c *boundedRuleCollector) Add(s string, _ struct{}) error {
+	if len(c.rules) < c.limit {
+		c.rules = append(c.rules, s)
+	}
 	return nil
 }
 
@@ -176,6 +193,7 @@ func newSdSet(bp *coremain.BP, args any) (any, error) {
 
 	p := &SdSet{
 		sources:         make(map[string]*RuleSource),
+		tag:             bp.Tag(),
 		localConfigFile: cfg.LocalConfig,
 		httpClient:      httpClient,
 		ctx:             ctx,
@@ -473,6 +491,61 @@ func (p *SdSet) backgroundUpdater() {
 
 func (p *SdSet) api() *chi.Mux {
 	r := chi.NewRouter()
+	// show 只读摘要：首行为汇总，其后最多 showRuleLimit 行规则文本，供面板名单管理统一读取
+	r.Get("/show", coremain.WithAsyncGC(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		// 先取启用规则源的快照，解析规则时不持锁
+		p.mu.RLock()
+		sourcesSnapshot := make([]*RuleSource, 0, len(p.sources))
+		for _, src := range p.sources {
+			if src.Enabled {
+				s := *src
+				sourcesSnapshot = append(sourcesSnapshot, &s)
+			}
+		}
+		p.mu.RUnlock()
+		sort.Slice(sourcesSnapshot, func(i, j int) bool { return sourcesSnapshot[i].Name < sourcesSnapshot[j].Name })
+
+		// 规则数复用现有 SRS 解析器统计，规则文本只留前 showRuleLimit 行
+		collector := &boundedRuleCollector{limit: showRuleLimit}
+		totalRules := 0
+		var lastMod time.Time
+		for _, src := range sourcesSnapshot {
+			if src.Files == "" {
+				continue
+			}
+			if fi, err := os.Stat(src.Files); err == nil && fi.ModTime().After(lastMod) {
+				lastMod = fi.ModTime()
+			}
+			b, err := os.ReadFile(src.Files)
+			if err != nil {
+				// 文件读不到时退回配置里记录的计数
+				totalRules += src.RuleCount
+				continue
+			}
+			if ok, count, _ := tryLoadSRS(b, collector, src.EnableRegexp); ok {
+				totalRules += count
+			} else {
+				totalRules += src.RuleCount
+			}
+		}
+		if lastMod.IsZero() {
+			for _, src := range sourcesSnapshot {
+				if src.LastUpdated.After(lastMod) {
+					lastMod = src.LastUpdated
+				}
+			}
+		}
+		mtimeText := "-"
+		if !lastMod.IsZero() {
+			mtimeText = lastMod.Format("2006-01-02 15:04:05")
+		}
+		fmt.Fprintf(w, "# %s | 来源: %s | 规则数: %d | 最近更新: %s\n", p.tag, p.localConfigFile, totalRules, mtimeText)
+		for _, rule := range collector.rules {
+			fmt.Fprintln(w, rule)
+		}
+	}))
 	r.Get("/config", func(w http.ResponseWriter, r *http.Request) {
 		p.mu.RLock()
 		defer p.mu.RUnlock()

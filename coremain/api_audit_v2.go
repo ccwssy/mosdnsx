@@ -17,9 +17,9 @@ type V2StatsResponse struct {
 	TotalQueries      uint64  `json:"total_queries"` // MODIFIED: Changed from int to uint64
 	AverageDurationMs float64 `json:"average_duration_ms"`
 	// 以下为概览页新增指标，均为只增不删的附加字段
-	BlockedQueries uint64  `json:"blocked_queries,omitempty"` // 环形缓冲中被拦截的查询条数
-	BlockedRatio   float64 `json:"blocked_ratio,omitempty"`   // 拦截占比，无数据时为 0
-	TodayQueries   uint64  `json:"today_queries,omitempty"`   // 服务启动后累计查询数，取自原子计数
+	BlockedQueries uint64  `json:"blocked_queries"` // 环形缓冲中被拦截的查询条数，0 值也照实返回
+	BlockedRatio   float64 `json:"blocked_ratio"`   // 拦截占比，无数据时为 0，0 值也照实返回
+	TodayQueries   uint64  `json:"today_queries"`   // 服务启动后累计查询数，取自原子计数，0 值也照实返回
 }
 
 // V2RankItem for ranking APIs
