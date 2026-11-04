@@ -234,24 +234,6 @@
         .blur-control { display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem; }
         .blur-control .switch-label { display: flex; align-items: center; }
         .blur-control input[type="range"] { flex-grow: 1; width: 100%; }
-        .mgmt-container { padding: 0; border: none; background: none; border-radius: var(--radius-main); display: flex; flex-direction: column; gap: 1.2rem; flex-grow: 1; }
-        
-        .list-mgmt-layout { display: flex; height: 100%; width: 100%; flex-grow: 1; }
-        .list-submenu { flex: 0 0 90px; border-right: 1px solid var(--border-color); overflow-y: auto; padding: 1rem 0; display: flex; flex-direction: column; }
-        .list-submenu-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.8rem; cursor: pointer; border-left: 3px solid transparent; transition: all 0.2s ease; font-size: 0.95rem; font-weight: 500; color: var(--control-text); }
-        .list-submenu-item:hover { background-color: var(--control-hover-bg); }
-        .list-submenu-item.active { background-color: color-mix(in srgb, var(--accent-color) 15%, transparent); border-left-color: var(--accent-color); color: var(--accent-color); font-weight: 600; }
-        .list-content-area { flex-grow: 1; padding: 0; padding-left: 1.2rem; display: flex; flex-direction: column;}
-        .list-mgmt-card { display: none; flex-direction: column; flex-grow: 1; background-color: transparent; border: none; padding: 0; }
-        .list-mgmt-card.active { display: flex; }
-        .list-mgmt-card textarea { width: 100%; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9rem; padding: 0.8rem; border-radius: var(--radius-control); border: 1px solid var(--control-border); background-color: var(--control-bg); color: var(--text-color); resize: vertical; flex-grow: 1; overflow-wrap: break-word; }
-        .list-mgmt-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
-        .list-mgmt-card .list-status, .list-mgmt-card .action-area { margin-top: 0; }
-        .list-mgmt-card button { background-color: var(--control-hover-bg); color: var(--control-text); border: 1px solid var(--control-border); padding: 0.6rem 1rem; font-weight: 500; font-size: 0.9rem; border-radius: var(--radius-control); cursor: pointer; }
-        .list-mgmt-card button:disabled { opacity: 0.7; cursor: not-allowed; }
-        .list-mgmt-card button:not(:disabled):hover { background-color: var(--accent-color); color: var(--control-active-text); border-color: var(--accent-color); opacity: 1; transform: translateY(-2px); }
-        .list-status .status-text.error { color: var(--error-color); font-weight: bold; }
-        .download-btn { font-size: 0.85rem; padding: 0.3rem 0.8rem; }
         
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.visible { opacity: 1; pointer-events: auto; }
@@ -709,14 +691,6 @@
             #appearance-container .theme-selector, #appearance-container .card-toggle-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.8rem; }
             
 
-            .list-mgmt-layout { flex-direction: column; } 
-            .list-submenu { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; gap: 0.5rem; border-right: none; border-bottom: 1px solid var(--border-color); margin: 0; padding: 0.8rem 0; } 
-            
-            .list-submenu-item { flex: 0 1 auto; text-align: center; justify-content: center; border-left: none; border-bottom: none; padding: 0.5rem 1rem; border-radius: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--control-border); background-color: var(--control-bg); }
-            .list-submenu-item:hover { border-color: var(--accent-color); background-color: var(--control-hover-bg); }
-            .list-submenu-item.active { background-color: var(--accent-color); color: var(--control-active-text); border-color: var(--accent-color); font-weight: 600; } 
-            
-            .list-content-area { padding: 0; }
             footer .footer-content { flex-direction: column; gap: 0.8rem; }
             footer .footer-separator { display: none; }
 
@@ -862,7 +836,7 @@
                     <div class="info-panel-tabs">
                         <button class="tab-button active" data-tab="system-info"><i class="fas fa-server"></i> 系统信息</button>
                         <button class="tab-button" data-tab="appearance"><i class="fas fa-palette"></i> 外观设置</button>
-                        <button class="tab-button" data-tab="list-mgmt"><i class="fas fa-list-alt"></i> 名单管理</button>
+                        <a class="tab-button" href="/log#list-mgmt" id="goto-list-mgmt-btn"><i class="fas fa-list-alt"></i> 名单管理</a>
                     </div>
                 </div>
                 <div class="control-section-body">
@@ -890,9 +864,6 @@
                             <h5 class="subsection-title">显示缓存卡片</h5>
                             <div class="card-toggle-group" id="card-toggles"></div>
                         </div>
-                    </div>
-                    <div id="tab-list-mgmt" class="tab-content">
-                        <div id="list-mgmt-container" class="mgmt-container"></div>
                     </div>
                 </div>
             </section>
@@ -958,7 +929,6 @@
         // --- MODIFICATION END ---
         
         const REFRESH_INTERVAL = 5000;
-        const MAX_LINES_TO_DISPLAY = 500;
         const D = document; 
         const baseFontStack = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
         const loadScript = (src) => new Promise((resolve, reject) => {
@@ -998,7 +968,6 @@
         let isRefreshing = false; 
         let currentTheme = 'light';
         let coreMode = 'A';
-        let isMgmtTabInitialized = { list: false };
 
         let currentModalData = { type: null, rawEntries: [], filteredEntries: [], totalCount: 0, loadTime: 0 };
         let dataModalSearchInput = null;
@@ -1011,18 +980,6 @@
             'GC 累计耗时': 'fa-stopwatch', '上次 GC 时间': 'fa-clock', 'Go 版本': 'fa-code-branch', '线程数': 'fa-sitemap',
             '打开文件描述符': 'fa-folder-open'
         };
-
-        
-        const ipSetProfiles = [ 
-            { tag: 'client_ip', name: '客户端 IP (IPSet)', icon: 'fa-network-wired' } 
-        ];
-        const domainSetProfiles = [
-            { tag: 'whitelist', name: '白名单', icon: 'fa-check-circle' },
-            { tag: 'blocklist', name: '黑名单', icon: 'fa-ban' },
-            { tag: 'greylist', name: '灰名单', icon: 'fa-plane' },
-            { tag: 'ddnslist', name: 'DDNS 域名', icon: 'fa-sync-alt' },
-        ];
-        const hostsProfiles = [];
 
         function createElement(tag, className, innerText = '', id = '') { const el = D.createElement(tag); if (className) el.className = className; if (innerText) el.innerText = innerText; if (id) el.id = id; return el; }
         function formatNumber(num) { if (typeof num !== 'number' && isNaN(num = parseFloat(num))) { return num; } return num.toLocaleString('en-US'); }
@@ -1366,106 +1323,6 @@
                 showErrorModal(e.message || '诊断请求失败');
             }
         }
-        async function initializeListManagementTab() {
-            const container = getById('list-mgmt-container');
-            container.innerHTML = '<div id="loading-spinner" style="display: block; margin: 2rem auto;"></div>';
-            isMgmtTabInitialized.list = false;
-
-            const allProfiles = [...ipSetProfiles, ...domainSetProfiles, ...hostsProfiles];
-            container.innerHTML = `<div class="list-mgmt-layout"><div class="list-submenu"></div><div class="list-content-area"></div></div>`;
-            const submenu = container.querySelector('.list-submenu');
-            const contentArea = container.querySelector('.list-content-area');
-
-            allProfiles.forEach(profile => {
-                submenu.innerHTML += `<div class="list-submenu-item" data-tag="${profile.tag}"><i class="icon-area fas ${profile.icon}"></i> <span>${profile.name}</span></div>`;
-                contentArea.innerHTML += `<div class="list-mgmt-card" id="list-card-${profile.tag}"><textarea id="textarea-${profile.tag}" placeholder="正在加载内容..." spellcheck="false"></textarea><div class="list-mgmt-footer"><div id="status-${profile.tag}" class="list-status"><span class="status-text"></span></div><div class="action-area"><button id="save-btn-${profile.tag}"><i class="fas fa-save"></i> 保存更改</button></div></div></div>`;
-            });
-
-            const submenuItems = submenu.querySelectorAll('.list-submenu-item');
-            const contentCards = contentArea.querySelectorAll('.list-mgmt-card');
-            submenuItems.forEach(item => {
-                item.addEventListener('click', () => {
-                    submenuItems.forEach(i => i.classList.remove('active'));
-                    contentCards.forEach(c => c.classList.remove('active'));
-                    item.classList.add('active');
-                    getById(`list-card-${item.dataset.tag}`).classList.add('active');
-                });
-            });
-
-            if (submenuItems.length > 0) submenuItems[0].click();
-            
-            const fetchPromises = allProfiles.map(profile => 
-                fetch(`/plugins/${profile.tag}/show`).then(res => {
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    return res.text();
-                }).then(text => ({ status: 'fulfilled', value: text, profile }))
-                  .catch(error => ({ status: 'rejected', reason: error, profile }))
-            );
-
-            const results = await Promise.all(fetchPromises);
-
-            results.forEach(result => {
-                const { profile } = result;
-                const textarea = getById(`textarea-${profile.tag}`);
-                const statusEl = getById(`status-${profile.tag}`).querySelector('.status-text');
-                const saveBtn = getById(`save-btn-${profile.tag}`);
-
-                if (result.status === 'fulfilled') {
-                    const fullText = result.value;
-                    const lines = fullText.trim() === '' ? [] : fullText.split('\n');
-                    
-                    if (lines.length > MAX_LINES_TO_DISPLAY) {
-                        textarea.value = lines.slice(0, MAX_LINES_TO_DISPLAY).join('\n');
-                        const statusContainer = getById(`status-${profile.tag}`);
-                        const downloadBtn = createElement('button', 'btn download-btn');
-                        downloadBtn.innerHTML = `<i class="fas fa-download"></i> 下载完整列表`;
-                        downloadBtn.onclick = () => {
-                            const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
-                            const url = URL.createObjectURL(blob);
-                            const a = createElement('a'); a.href = url; a.download = `${profile.tag}_full_list.txt`;
-                            D.body.appendChild(a); a.click(); D.body.removeChild(a); URL.revokeObjectURL(url);
-                        };
-                        if(!statusContainer.querySelector('.download-btn')) statusContainer.appendChild(downloadBtn);
-                        statusEl.textContent = `已截断显示前 ${MAX_LINES_TO_DISPLAY} 行 (共 ${lines.length} 行)`;
-                    } else if (lines.length === 0) {
-                        textarea.value = '';
-                        textarea.placeholder = '文件内容为空';
-                        statusEl.textContent = '列表为空';
-                    } else {
-                        textarea.value = fullText.trim();
-                        statusEl.textContent = `加载于 ${new Date().toLocaleTimeString()} (共 ${lines.length} 行)`;
-                    }
-                } else {
-                    textarea.value = `加载失败: ${result.reason.message}`;
-                    textarea.placeholder = '加载失败';
-                    statusEl.textContent = `加载失败`;
-                    statusEl.classList.add('error');
-                    if (saveBtn) saveBtn.disabled = true;
-                }
-
-                if (saveBtn) saveBtn.onclick = () => handleListSave(profile);
-            });
-            
-            isMgmtTabInitialized.list = true;
-        }
-        
-        async function handleListSave(profile) {
-            const textarea = getById(`textarea-${profile.tag}`);
-            const statusEl = getById(`status-${profile.tag}`).querySelector('.status-text');
-            try {
-                statusEl.textContent = '正在保存...'; statusEl.classList.remove('error');
-                const values = textarea.value.split('\n').map(s => s.trim()).filter(Boolean);
-                await postApi(`/plugins/${profile.tag}/post`, { values });
-                showToast(`“${profile.name}” 保存成功！`);
-                statusEl.textContent = `保存成功! ${new Date().toLocaleTimeString()} (共 ${values.length} 行)`;
-            } catch (e) {
-                showToast(`保存 “${profile.name}” 失败`, 'error');
-                showErrorModal(e.message);
-                statusEl.textContent = '保存失败';
-                statusEl.classList.add('error');
-            }
-        }
-        
         function initializeTooltips() {
             const tooltipEl = getById('global-tooltip');
             if (!tooltipEl) return;
@@ -1784,9 +1641,9 @@
             
             renderDataViewButtons();
             
-            const tabButtons = D.querySelectorAll('.tab-button');
+            const tabButtons = D.querySelectorAll('button.tab-button');
             const tabContents = D.querySelectorAll('.control-section-body .tab-content');
-            tabButtons.forEach(button => { button.addEventListener('click', () => { tabButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active'); const targetTabId = `tab-${button.dataset.tab}`; tabContents.forEach(content => content.classList.toggle('active', content.id === targetTabId)); if (button.dataset.tab === 'list-mgmt' && !isMgmtTabInitialized.list) initializeListManagementTab(); }); });
+            tabButtons.forEach(button => { button.addEventListener('click', () => { tabButtons.forEach(btn => btn.classList.remove('active')); button.classList.add('active'); const targetTabId = `tab-${button.dataset.tab}`; tabContents.forEach(content => content.classList.toggle('active', content.id === targetTabId)); }); });
             
             getById('set-bg-btn').onclick = () => { const url = prompt('请输入背景图片的 URL 或本地绝对路径:', localStorage.getItem('customBackgroundUrl') || ''); if(url !== null) setBackgroundImage(url); };
             getById('remove-bg-btn').onclick = () => { if(confirm('确定移除自定义背景吗?')) setBackgroundImage(''); };
@@ -2184,12 +2041,6 @@
             D.documentElement.style.setProperty('--glass-blur-strength', `${blurEnabled ? blurStrength : 0}px`);
             
             setTheme(savedTheme);
-
-            const activeTabButton = D.querySelector('.tab-button.active');
-            if (activeTabButton) {
-                const tabName = activeTabButton.dataset.tab;
-                if (tabName === 'list-mgmt') await initializeListManagementTab();
-            }
 
             await refreshData(true, true);
             

@@ -4441,9 +4441,12 @@ const handleInteractiveClick = (e) => {
         }
 
         handleResize();
-        const initialHash = firstHash;
+        // [新增] 首页「名单管理」入口跳转到 /log#list-mgmt：复用既有 hash 解析，先把 #list-mgmt 映射到规则页 hash
+        const initialHash = firstHash === '#list-mgmt' ? '#rules' : firstHash;
         const initialLink = document.querySelector(`.tab-link[href="${initialHash}"]`);
         if (initialLink) handleNavigation(initialLink);
+        // 子页签的 active 切换与 listManager.init() 复用既有的 sub-nav 点击事件，不另造一套 hash 解析
+        if (firstHash === '#list-mgmt') document.querySelector('.sub-nav-link[data-sub-tab="list-mgmt"]')?.click();
         // 首屏统一轻量刷新，所有重数据由懒加载或"刷新"按钮触发
         await updatePageData(false);
         if (document.fonts?.ready) await document.fonts.ready;
