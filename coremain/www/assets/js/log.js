@@ -55,12 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
         topDomainsBody: document.getElementById('top-domains-body'), topClientsBody: document.getElementById('top-clients-body'), slowestQueriesBody: document.getElementById('slowest-queries-body'), topBlockedBody: document.getElementById('top-blocked-body'),
         shuntResultsBody: document.getElementById('shunt-results-body'),
         upstreamStatsBody: document.getElementById('upstream-stats-body'),
-        // 覆盖配置元素
-        overridesModule: document.getElementById('overrides-module'),
-        overrideSocks5Input: document.getElementById('override-socks5-log'),
-        overrideEcsInput: document.getElementById('override-ecs-log'),
-        overridesLoadBtn: document.getElementById('overrides-load-btn-log'),
-        overridesSaveBtn: document.getElementById('overrides-save-btn-log'),
         logTable: document.getElementById('log-table'), logTableHead: document.getElementById('log-table-head'), logTableBody: document.getElementById('log-table-body'),
         logQueryTab: document.getElementById('log-query-tab'),
         logSearch: document.getElementById('log-search'), logFakeIP: document.getElementById('log-fakeip-filter'), logQueryTableContainer: document.getElementById('log-query-table-container'), logLoader: document.getElementById('log-loader'),
@@ -1102,6 +1096,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // 日志页跟随首页「外观设置」：真源是 localStorage 的 theme / customBackgroundUrl，
+    // 只做 documentElement 内联变量覆盖（内联优先级高于 [data-theme] 规则），不改任何 CSS 文件、不写 localStorage。
+    const HOME_THEME_VARS = {
+        light: { bg: '#f7f9fd', card: '#ffffff', text: '#2c3e50', border: '#e0e6ec', accent: '#4a90e2', label: '#7f8c8d' },
+        dark: { bg: '#1a1a1a', card: '#282828', text: '#e0e0e0', border: '#3a3a3a', accent: '#5096ff', label: '#bbbbbb' },
+        glass: { bg: '#141824', card: 'rgba(255, 255, 255, 0.1)', text: '#ffffff', border: 'rgba(255, 255, 255, 0.2)', accent: '#90b8ff', label: '#d0d0d0' },
+        material: { bg: '#f8f9fa', card: '#ffffff', text: '#202124', border: '#dadce0', accent: '#4285f4', label: '#5f6368' },
+        cupertino_light: { bg: '#f5f5f7', card: '#ffffff', text: '#1d1d1f', border: '#d2d2d7', accent: '#007aff', label: '#6e6e73' },
+        cupertino_dark: { bg: '#1d1d1f', card: 'rgba(50, 50, 52, 0.7)', text: 'rgba(255, 255, 255, 0.9)', border: 'rgba(84, 84, 88, 0.65)', accent: '#0a84ff', label: 'rgba(235, 235, 245, 0.6)' },
+        cyberpunk: { bg: '#1a0933', card: 'rgba(26, 9, 51, 0.6)', text: '#e0d8f0', border: 'rgba(0, 255, 255, 0.5)', accent: '#ff00ea', label: '#9085a6' },
+        kawaii: { bg: '#fcefee', card: 'rgba(255, 255, 255, 0.7)', text: '#5e4856', border: 'rgba(234, 182, 182, 0.5)', accent: '#ff8a8a', label: '#a08a9a' },
+        miku: { bg: '#1c2833', card: 'rgba(35, 55, 75, 0.85)', text: '#fdfefe', border: '#3498db', accent: '#39c5bb', label: '#aed6f1' },
+        eva: { bg: '#1e1a2f', card: 'rgba(40, 35, 60, 0.8)', text: '#f0f0f0', border: '#5a5278', accent: '#7de938', label: '#b0a8d1' },
+        monokai: { bg: '#222324', card: 'rgba(45, 46, 47, 0.85)', text: '#fcfcfa', border: '#414344', accent: '#ff6188', label: '#8f908a' },
+        solarized_dark: { bg: '#002b36', card: 'rgba(7, 54, 66, 0.8)', text: '#93a1a1', border: '#073642', accent: '#2aa198', label: '#657b83' }
+    };
+    const HOME_LIGHT_THEMES = ['light', 'material', 'cupertino_light', 'kawaii'];
+    const homeAppearance = {
+        // 未设置或不认识的主题一律不介入，保持日志页现有 dark/indigo 外观
+        apply() {
+            const themeName = localStorage.getItem('theme');
+            const vars = themeName && Object.prototype.hasOwnProperty.call(HOME_THEME_VARS, themeName) ? HOME_THEME_VARS[themeName] : null;
+            if (!vars) return;
+            const rootStyle = document.documentElement.style;
+            const setVar = (name, value) => { if (value) rootStyle.setProperty(name, value); };
+            setVar('--color-bg', vars.bg);
+            setVar('--color-bg-card', vars.card);
+            setVar('--color-bg-alt', vars.card);
+            setVar('--color-text-primary', vars.text);
+            setVar('--color-text-secondary', vars.label);
+            setVar('--color-border', vars.border);
+            setVar('--color-accent-primary', vars.accent);
+            setVar('--color-accent-primary-hover', vars.accent);
+            setVar('--color-accent-text', '#ffffff');
+            // 只切明暗底盘，使 --color-bg-blocked 等语义变量仍取合理值；其余语义变量保持 CSS 原值
+            document.documentElement.dataset.theme = HOME_LIGHT_THEMES.includes(themeName) ? 'light' : 'dark';
+            this.applyBackground(vars);
+        },
+        applyBackground(vars) {
+            const bgUrl = (localStorage.getItem('customBackgroundUrl') || '').trim();
+            if (!bgUrl) return;
+            const rootStyle = document.documentElement.style;
+            const bodyStyle = document.body.style;
+            bodyStyle.backgroundImage = `url('${bgUrl.replace(/'/g, "\\'")}')`;
+            bodyStyle.backgroundSize = 'cover';
+            bodyStyle.backgroundPosition = 'center';
+            bodyStyle.backgroundAttachment = 'fixed';
+            bodyStyle.backgroundRepeat = 'no-repeat';
+            // 页面底色透明让背景图透出，卡片补一层半透明避免整块不透明遮住背景；不支持 color-mix 时退回原 card 值
+            rootStyle.setProperty('--color-bg', 'transparent');
+            const canMix = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('color', 'color-mix(in srgb, #ffffff 88%, transparent)');
+            rootStyle.setProperty('--color-bg-card', canMix ? `color-mix(in srgb, ${vars.card} 88%, transparent)` : vars.card);
+        }
+    };
+
     const animateValue = (element, start, end, duration, decimals = 0) => { if (!element || start === null || end === null) return; if (start === end) { element.textContent = (decimals > 0 ? parseFloat(end).toFixed(decimals) : Math.floor(end).toLocaleString()); return; } let startTimestamp = null; const step = (timestamp) => { if (!startTimestamp) startTimestamp = timestamp; const progress = Math.min((timestamp - startTimestamp) / duration, 1); const current = start + progress * (end - start); element.textContent = (decimals > 0 ? parseFloat(current).toFixed(decimals) : Math.floor(current).toLocaleString()); if (progress < 1) window.requestAnimationFrame(step); }; window.requestAnimationFrame(step); };
     const updateStatChange = (element, prev, curr, isTime = false) => { if (prev === null || curr === null || prev === 0) { element.style.visibility = 'hidden'; return; } const diff = curr - prev; const change = (diff / prev) * 100; if (Math.abs(change) < 0.1) { element.style.visibility = 'hidden'; return; } const direction = isTime ? (diff < 0 ? 'up' : 'down') : (diff > 0 ? 'up' : 'down'); const icon = direction === 'up' ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8L18 14H6L12 8Z"></path></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16L6 10H18L12 16Z"></path></svg>'; element.className = `stat-change ${direction}`; element.innerHTML = `${icon} ${Math.abs(change).toFixed(1)}%`; element.style.visibility = 'visible'; };
     const setupGlowEffect = () => { elements.container?.addEventListener('mousemove', (e) => { const card = e.target.closest('.card:not(dialog)'); if (card) { const rect = card.getBoundingClientRect(); card.style.setProperty('--glow-x', `${e.clientX - rect.left}px`); card.style.setProperty('--glow-y', `${e.clientY - rect.top}px`); } }); };
@@ -1820,7 +1869,8 @@ document.addEventListener('DOMContentLoaded', () => {
         queryInfo['客户端'] = createInteractiveLine(aliasManager.getDisplayName(data.client_ip, data.client_name) + ` (${data.client_ip})`, data.client_ip, data.client_ip, true);
         queryInfo['类型'] = `<span>${data.query_type || 'N/A'}</span>`;
         if (data.query_class) queryInfo['类别'] = `<span>${data.query_class}</span>`;
-        if (data.domain_set) queryInfo['分流规则'] = createInteractiveLine(data.domain_set, data.domain_set, data.domain_set, true);
+        if (data.domain_set) { const ruleLabel = getRuleSetLabel(data); queryInfo['分流规则'] = createInteractiveLine(escapeHtml(ruleLabel), escapeHtml(ruleLabel), escapeHtml(data.domain_set), true); }
+        if (data.matched_rule) queryInfo['命中规则'] = createInteractiveLine(escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), true);
         if (data.trace_id) queryInfo['Trace ID'] = createInteractiveLine(data.trace_id, data.trace_id, data.trace_id, true);
 
         responseInfo['耗时'] = `<span>${data.duration_ms.toFixed(2)} ms</span>`;
@@ -1837,7 +1887,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const getContrastingTextColor = (hexColor) => { if (!hexColor || hexColor.length < 4) return '#0f172a'; let r = parseInt(hexColor.substr(1, 2), 16), g = parseInt(hexColor.substr(3, 2), 16), b = parseInt(hexColor.substr(5, 2), 16); const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000; return (yiq >= 128) ? '#0f172a' : '#ffffff'; };
-    function getRuleTagHTML(log) { if (!log || !log.domain_set) return ''; const ruleName = log.domain_set; let bgColor = state.shuntColors[ruleName]; if (!bgColor) { let hash = 0; for (let i = 0; i < ruleName.length; i++) hash = ruleName.charCodeAt(i) + ((hash << 5) - hash); bgColor = `hsl(${Math.abs(hash % 360)}, 70%, 45%)`; } const textColor = '#ffffff'; return `<span class="rule-tag" style="background-color: ${bgColor}; color: ${textColor};" title="分流规则: ${ruleName}">${ruleName}</span>`; }
+    // 命中规则集（filter_list）来自审计记录字段，文案不硬编码任何规则集名
+    function getRuleSetLabel(log) {
+        if (!log || !log.domain_set) return '';
+        const filterList = (log.filter_list || '').trim();
+        return filterList ? `${log.domain_set} · ${filterList}` : log.domain_set;
+    }
+    function getRuleTagHTML(log) {
+        if (!log || !log.domain_set) return '';
+        const ruleName = log.domain_set;
+        let bgColor = state.shuntColors[ruleName];
+        if (!bgColor) { let hash = 0; for (let i = 0; i < ruleName.length; i++) hash = ruleName.charCodeAt(i) + ((hash << 5) - hash); bgColor = `hsl(${Math.abs(hash % 360)}, 70%, 45%)`; }
+        const textColor = '#ffffff';
+        const label = getRuleSetLabel(log);
+        const titleParts = [`分流规则: ${label}`];
+        if (log.matched_rule) titleParts.push(`命中规则: ${log.matched_rule}`);
+        return `<span class="rule-tag" style="background-color: ${bgColor}; color: ${textColor};" title="${titleParts.map(part => escapeHtml(part)).join('&#10;')}">${escapeHtml(label)}</span>`;
+    }
     function getResponseTagHTML(log) { if (!log) return ''; const code = log.response_code || 'UNKNOWN'; let tagClass = 'other'; if (code === 'NOERROR') tagClass = 'noerror'; else if (code === 'NXDOMAIN') tagClass = 'nxdomain'; else if (code === 'SERVFAIL') tagClass = 'servfail'; else if (code === 'REFUSED') tagClass = 'refused'; return `<span class="response-tag ${tagClass}">${code}</span>`; }
     function getResponseSummary(log) { if (!log) return ''; if (log.response_code !== 'NOERROR') return getResponseTagHTML(log); if (log.answers?.length > 0) { const firstIp = log.answers.find(a => a.type === 'A' || a.type === 'AAAA'); const firstCname = log.answers.find(a => a.type === 'CNAME'); let mainText = firstIp?.data ?? firstCname?.data ?? log.answers[0].data; if (mainText.length > 25) mainText = mainText.substring(0, 22) + '...'; if (log.answers.length > 1) mainText += ` (+${log.answers.length - 1})`; return `<span class="truncate-text">${mainText}</span>`; } return '<span>(empty)</span>'; }
 
@@ -1911,7 +1977,8 @@ document.addEventListener('DOMContentLoaded', () => {
             queryInfo['客户端'] = createInteractiveLine(aliasManager.getDisplayName(data.client_ip, data.client_name), data.client_ip, data.client_ip, true, true);
             queryInfo['类型'] = `<small>${data.query_type || 'N/A'}</small>`;
             if (data.query_class) queryInfo['类别'] = `<small>${data.query_class}</small>`;
-            if (data.domain_set) queryInfo['规则'] = createInteractiveLine(data.domain_set, data.domain_set, data.domain_set, true, true);
+            if (data.domain_set) { const ruleLabel = getRuleSetLabel(data); queryInfo['规则'] = createInteractiveLine(escapeHtml(ruleLabel), escapeHtml(ruleLabel), escapeHtml(data.domain_set), true, true); }
+            if (data.matched_rule) queryInfo['命中规则'] = createInteractiveLine(escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), true, true);
             responseInfo['耗时'] = `<small>${data.duration_ms.toFixed(2)} ms</small>`;
             responseInfo['状态'] = `<small>${data.response_code || 'N/A'}${data.is_blocked ? ' (Blocked)' : ''}</small>`;
             if (flagItems.length) responseInfo['标志'] = `<small>${flagItems.join(', ')}</small>`;
@@ -3246,263 +3313,6 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
         }
     };
 
-    // -- [修改] -- 终极修复版：修复头部图标及状态显示
-    const overridesManager = {
-        state: { replacements: [] },
-
-        getElements() {
-            const get = (id) => document.getElementById(id) || document.getElementById(id.replace('-log', ''));
-            return {
-                module: get('overrides-module'), // 旧卡片 DOM
-                socks5: get('override-socks5-log'),
-                ecs: get('override-ecs-log'),
-                oldSaveBtn: get('overrides-save-btn-log'),
-                oldLoadBtn: get('overrides-load-btn-log')
-            };
-        },
-
-        // --- 主入口 ---
-        async load(silent = false) {
-            const els = this.getElements();
-            if (!els.socks5) return;
-
-            // 1. 隐藏旧按钮
-            if (els.oldSaveBtn) els.oldSaveBtn.style.display = 'none';
-            if (els.oldLoadBtn) els.oldLoadBtn.style.display = 'none';
-
-            // 2. 注入新板块
-            this.injectNewCard();
-
-            try {
-                const data = await api.fetch('/api/v1/overrides');
-
-                if (els.socks5) els.socks5.value = (data && data.socks5) || '';
-                if (els.ecs) els.ecs.value = (data && data.ecs) || '';
-
-                this.state.replacements = (data && data.replacements) ? data.replacements : [];
-                this.renderReplacementsTable();
-
-                if (!silent) ui.showToast('已读取当前覆盖配置');
-            } catch (e) {
-                if (!silent) ui.showToast('读取覆盖配置失败', 'error');
-            }
-        },
-
-        // --- 核心逻辑：创建并正确布局新卡片 ---
-        injectNewCard() {
-            if (document.getElementById('replacements-card')) return;
-
-            const els = this.getElements();
-            if (!els.module || !els.module.parentNode) return;
-
-            // 创建新卡片，使用 control-module 类以保持一致性
-            const newCard = document.createElement('div');
-            newCard.id = 'replacements-card';
-            newCard.className = 'control-module';
-            newCard.style.gridColumn = '1 / -1';
-
-            // 填充内容
-            newCard.innerHTML = `
-                <div class="module-header">
-                    <h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M7.5 5.6L5 7 6.4 4.5 5 2 7.5 3.4 10 2 8.6 4.5 10 7 7.5 5.6zm12 9.8L22 17l-2.5 1.4L18.1 22l-1.4-2.5L14.2 18l2.5-1.4L18.1 14l1.4 2.5zM11 10c0-3.31 2.69-6 6-6s6 2.69 6 6-2.69 6-6 6-6-2.69-6-6zm-8 8c0-3.31 2.69-6 6-6s6 2.69 6 6-2.69 6-6 6-6-2.69-6-6z"/>
-                        </svg>
-                        其它设置
-                    </h3>
-                    <button class="button secondary small" id="rep-add-btn">
-                        <span>+ 添加规则</span>
-                    </button>
-                </div>
-
-                <p class="module-desc">配置说明：https://github.com/yyysuo/mosdns</p>
-                
-                <div class="scrollable-table-container">
-                    <table class="data-table" style="min-width: 650px;">
-                        <thead>
-                            <tr>
-                                <th style="width: 15%;">状态</th>
-                                <th style="width: 25%;">原值 (查找)</th>
-                                <th style="width: 25%;">新值 (替换)</th>
-                                <th>备注</th>
-                                <th style="width: 60px; text-align: center;">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="rep-tbody"></tbody>
-                    </table>
-                </div>
-
-                <div class="button-group" style="margin-top: 1rem; justify-content: flex-end;">
-                    <span style="color: var(--color-text-secondary); font-size: 0.85em; margin-right: auto;">保存应用SOCKS5/ECS IP/上游DNS设置</span>
-                    <button class="button primary" id="rep-save-btn">
-                        <span>保存并重启</span>
-                    </button>
-                </div>
-            `;
-
-            // 插入 DOM
-            els.module.parentNode.insertBefore(newCard, els.module.nextSibling);
-
-
-            // 6. 绑定事件
-            newCard.querySelector('#rep-add-btn').addEventListener('click', () => {
-                this.state.replacements.push({ original: '', new: '', comment: '' }); // 新增行没有 result，会显示“未保存”
-                this.renderReplacementsTable();
-            });
-
-            newCard.querySelector('#rep-save-btn').addEventListener('click', () => this.save());
-
-            const tbody = newCard.querySelector('#rep-tbody');
-            tbody.addEventListener('click', (e) => {
-                const btn = e.target.closest('.rep-del-btn');
-                if (btn) {
-                    const idx = parseInt(btn.dataset.index);
-                    this.state.replacements.splice(idx, 1);
-                    this.renderReplacementsTable();
-                }
-            });
-
-            tbody.addEventListener('input', (e) => {
-                if (e.target.matches('input')) {
-                    const idx = parseInt(e.target.dataset.index);
-                    const field = e.target.dataset.field;
-                    this.state.replacements[idx][field] = e.target.value;
-                }
-            });
-        },
-
-renderReplacementsTable() {
-            const tbody = document.getElementById('rep-tbody');
-            if (!tbody) return;
-
-            const table = tbody.closest('table');
-            if (table) {
-                if (state.isMobile) {
-                    table.classList.add('mobile-card-view');
-                } else {
-                    table.classList.remove('mobile-card-view');
-                }
-            }
-
-            if (this.state.replacements.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding: 2rem; color: var(--color-text-secondary); font-style: italic;">暂无替换规则</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = this.state.replacements.map((rule, index) => {
-                let statusHtml = '<span class="response-tag other" style="font-size: 0.8em; opacity: 0.7;">未保存</span>';
-                if (rule.result) {
-                    if (rule.result.startsWith('Success')) {
-                        statusHtml = `<span class="response-tag noerror" style="font-size: 0.8em;">${rule.result}</span>`;
-                    } else if (rule.result.includes('Not Found')) {
-                        statusHtml = `<span class="response-tag nxdomain" style="font-size: 0.8em;">${rule.result}</span>`;
-                    } else {
-                        statusHtml = `<span class="response-tag other" style="font-size: 0.8em;">${rule.result}</span>`;
-                    }
-                }
-
-                if (state.isMobile) {
-                    // 移动端卡片视图
-                    return `
-                        <tr>
-                            <td>
-                                <div class="mobile-system-card">
-                                    <div class="card-header">
-                                        <div style="font-size:0.9rem; font-weight:600;">规则 #${index + 1}</div>
-                                        ${statusHtml}
-                                    </div>
-                                    <div class="mobile-override-row">
-                                        <div>
-                                            <label style="font-size:0.75rem; color:var(--color-text-secondary);">原值 (查找)</label>
-                                            <input type="text" class="input" value="${rule.original || ''}" data-index="${index}" data-field="original" placeholder="例如: 1.1.1.1">
-                                        </div>
-                                        <div>
-                                            <label style="font-size:0.75rem; color:var(--color-text-secondary);">新值 (替换)</label>
-                                            <input type="text" class="input" value="${rule.new || ''}" data-index="${index}" data-field="new" placeholder="例如: 127.0.0.1">
-                                        </div>
-                                        <div>
-                                            <label style="font-size:0.75rem; color:var(--color-text-secondary);">备注</label>
-                                            <input type="text" class="input" value="${rule.comment || ''}" data-index="${index}" data-field="comment" placeholder="可选">
-                                        </div>
-                                    </div>
-                                    <div style="text-align:right; margin-top:0.8rem;">
-                                        <button class="button danger small rep-del-btn" data-index="${index}" style="width:100%;">删除规则</button>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                } else {
-                    // PC端表格视图
-                    return `
-                        <tr style="border-bottom: 1px solid var(--color-border);">
-                            <td style="padding: 8px;">${statusHtml}</td>
-                            <td style="padding: 8px;">
-                                <input type="text" class="input" style="width: 100%;" value="${rule.original || ''}" data-index="${index}" data-field="original" placeholder="例如: 1.1.1.1">
-                            </td>
-                            <td style="padding: 8px;">
-                                <input type="text" class="input" style="width: 100%;" value="${rule.new || ''}" data-index="${index}" data-field="new" placeholder="例如: 127.0.0.1">
-                            </td>
-                            <td style="padding: 8px;">
-                                <input type="text" class="input" style="width: 100%;" value="${rule.comment || ''}" data-index="${index}" data-field="comment" placeholder="备注 (可选)">
-                            </td>
-                            <td style="padding: 8px; text-align: center;">
-                                <button class="button danger small rep-del-btn" data-index="${index}" title="删除此行" style="padding: 6px 10px;">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                }
-            }).join('');
-        },
-
-        async save() {
-            const els = this.getElements();
-            if (!els.socks5 || !els.ecs) return;
-
-            const btn = document.getElementById('rep-save-btn');
-            ui.setLoading(btn, true);
-
-            const socks5 = els.socks5.value.trim();
-            const ecs = els.ecs.value.trim();
-            // 过滤掉空行
-            const validReplacements = this.state.replacements
-                .map(r => ({
-                    original: r.original.trim(),
-                    new: r.new.trim(),
-                    comment: r.comment ? r.comment.trim() : ''
-                }))
-                .filter(r => r.original);
-
-            const payload = {
-                socks5: socks5,
-                ecs: ecs,
-                replacements: validReplacements
-            };
-
-            try {
-                // 发送 POST 请求
-                await api.fetch('/api/v1/overrides', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                ui.showToast('配置已保存，4秒后重启服务…', 'success');
-                try {
-                    await api.fetch('/api/v1/system/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delay_ms: 300 }) });
-                    // 重启后刷新页面
-                    setTimeout(() => { location.reload(); }, 4000);
-                } catch (err) {
-                    ui.showToast('自动重启请求失败，请尝试手动重启', 'error');
-                    ui.setLoading(btn, false);
-                }
-            } catch (e) {
-                ui.showToast('保存配置失败', 'error');
-                console.error("Save Error:", e);
-                ui.setLoading(btn, false);
-            }
-        }
-    };
-
-// [插入点] 修复后的 Upstream 管理器
-// [新增] 上游DNS管理器
     // 重启 MosDNS（上游 DNS 设置模块删除后保留的唯一入口）
     const serviceRestart = {
         async restartService() {
@@ -3540,9 +3350,6 @@ renderReplacementsTable() {
         });
 
         elements.tabLinks.forEach(link => link.addEventListener('click', (e) => { e.preventDefault(); handleNavigation(link); }));
-        // 覆盖配置：按钮事件
-        if (elements.overridesLoadBtn) elements.overridesLoadBtn.addEventListener('click', () => overridesManager.load(false));
-        if (elements.overridesSaveBtn) elements.overridesSaveBtn.addEventListener('click', () => overridesManager.save());
         window.addEventListener('popstate', () => { const hash = window.location.hash || '#overview'; const targetLink = document.querySelector(`.tab-link[href="${hash}"]`); handleNavigation(targetLink || elements.tabLinks[0]); });
         // 窗口尺寸变化：节流 100ms（trailing 补一次，保证最后一次尺寸生效），passive 声明不阻止默认行为
         window.addEventListener('resize', throttle(handleResize, 100), { passive: true });
@@ -3909,13 +3716,13 @@ const handleInteractiveClick = (e) => {
             }
         });
         watch('#feature-switches-module', () => switchManager.loadStatus());
-        watch('#overrides-module', () => overridesManager.load(true));
         watch('#cache-stats-table', () => cacheManager.updateStats());
     }
 
     async function init() {
         state.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         themeManager.init();
+        homeAppearance.apply();
         // 根据进入页签决定是否首屏加载别名（仅日志/概览需要）。避免 system-control 首屏的额外请求。
         const firstHash = window.location.hash || '#overview';
         const firstTab = (document.querySelector(`.tab-link[href="${firstHash}"]`)?.dataset.tab) || firstHash.replace('#', '');
@@ -3959,7 +3766,6 @@ const handleInteractiveClick = (e) => {
                 // 预加载系统控制页的关键模块
                 Promise.allSettled([
                     switchManager.loadStatus(),
-                    overridesManager.load(true),
 //                    updateManager.refreshStatus(false)
                 ]).catch(() => { });
             }, 500);
@@ -4041,7 +3847,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 mod.dataset.category = 'basic';
             } else if (id === 'system-info-module' || id === 'update-module') {
                 mod.dataset.category = 'system';
-            } else if (id === 'feature-switches-module' || id === 'overrides-module') {
+            } else if (id === 'feature-switches-module') {
                 mod.dataset.category = 'advanced';
             } else if (mod.querySelector('#cache-stats-table')) {
                 mod.dataset.category = 'data';
@@ -4064,7 +3870,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     mod.dataset.category = 'basic';
                 } else if (id === 'system-info-module' || id === 'update-module') {
                     mod.dataset.category = 'system';
-                } else if (id === 'feature-switches-module' || id === 'overrides-module' || id === 'replacements-card' || id === 'socks-ecs-module') {
+                } else if (id === 'feature-switches-module') {
                     mod.dataset.category = 'advanced';
                 } else if (mod.querySelector('#cache-stats-table')) {
                     mod.dataset.category = 'data';

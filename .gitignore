@@ -36,6 +36,8 @@ CLAUDE.md
 .cursorrules
 docs/*-prompt*.md
 docs/*-plan-*.md
+evidence/
+report/
 log/
 *.log
 .dsh-*

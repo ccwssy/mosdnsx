@@ -107,6 +107,12 @@ type AuditLog struct {
 	// ClientName 是该 client_ip 对应的客户端别名，写日志时按别名表填充，查不到则为空串。
 	// 该字段为新增字段，旧日志文件里没有它，omitempty 保证旧数据仍能正常解析、无别名时不输出。
 	ClientName string `json:"client_name,omitempty"`
+	// FilterList 是命中规则所属规则集的展示名（如 config.json 里的列表 name），
+	// 只在 adguard 命中且能查到映射时填充。它是 DomainSet 的并列字段，
+	// DomainSet 的取值体系（adguard / unmatched_rule / 各规则集 tag）不因此改变。
+	FilterList string `json:"filter_list,omitempty"`
+	// MatchedRule 是命中的规则原文，供详情/悬停查看，不进列表列。
+	MatchedRule string `json:"matched_rule,omitempty"`
 }
 
 type ResponseFlags struct {
@@ -429,6 +435,18 @@ func (c *AuditCollector) processBatch(batch []*auditContext) {
 		if val, ok := qCtx.GetValue(query_context.KeyDomainSet); ok {
 			if name, isString := val.(string); isString {
 				log.DomainSet = name
+			}
+		}
+
+		// 归属与规则原文是并列字段：只有插件确实写了才填充，旧链路/白名单放行都没有。
+		if val, ok := qCtx.GetValue(query_context.KeyFilterList); ok {
+			if name, isString := val.(string); isString {
+				log.FilterList = c.internString(name)
+			}
+		}
+		if val, ok := qCtx.GetValue(query_context.KeyMatchedRule); ok {
+			if text, isString := val.(string); isString {
+				log.MatchedRule = c.internString(text)
 			}
 		}
 

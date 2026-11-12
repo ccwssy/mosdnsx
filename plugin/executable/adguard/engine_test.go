@@ -1,6 +1,7 @@
 package adguard_rule
 
 import (
+	"fmt"
 	"net/netip"
 	"testing"
 
@@ -12,6 +13,16 @@ func newDnsQuery(name string, qtype uint16) *dns.Msg {
 	q := new(dns.Msg)
 	q.SetQuestion(dns.Fqdn(name), qtype)
 	return q
+}
+
+
+// testLists 把若干规则文本包装成 ruleList，名字按下标生成，用于验证列表归属回查。
+func testLists(texts ...string) []ruleList {
+	lists := make([]ruleList, 0, len(texts))
+	for i, text := range texts {
+		lists = append(lists, ruleList{Name: fmt.Sprintf("list-%d", i+1), Text: text})
+	}
+	return lists
 }
 
 // 本测试锁定「过滤语义与 AdGuard Home 一致」这一契约。
@@ -32,7 +43,7 @@ func TestFilterEngineSemantics(t *testing.T) {
 1.2.3.4 hosts-rewritten.example.com
 /^regex-ad[0-9]+\.example\.com$/
 `
-	eng, err := newFilterEngine([]string{list})
+	eng, err := newFilterEngine(testLists(list))
 	if err != nil {
 		t.Fatalf("newFilterEngine: %v", err)
 	}
@@ -76,10 +87,10 @@ func TestFilterEngineSemantics(t *testing.T) {
 // 注意：$important 例外规则按域名规则本身生效——写成 @@||sohu.com^ 会放行全部子域，
 // 精确到子域时必须写 @@||pv.sohu.com^，与 AdGuard Home 行为一致。
 func TestExceptionBeatsBlocklist(t *testing.T) {
-	eng, err := newFilterEngine([]string{
+	eng, err := newFilterEngine(testLists(
 		"||pv.sohu.com^\n||sohu.com^\n",
 		"@@||pv.sohu.com^$important\n",
-	})
+	))
 	if err != nil {
 		t.Fatalf("newFilterEngine: %v", err)
 	}
@@ -93,10 +104,10 @@ func TestExceptionBeatsBlocklist(t *testing.T) {
 
 // $important 例外规则对子域同样生效（与 AGH 语义一致），用作语义固定。
 func TestImportantExceptionCoversSubdomains(t *testing.T) {
-	eng, err := newFilterEngine([]string{
+	eng, err := newFilterEngine(testLists(
 		"||sohu.com^\n",
 		"@@||sohu.com^$important\n",
-	})
+	))
 	if err != nil {
 		t.Fatalf("newFilterEngine: %v", err)
 	}
@@ -107,7 +118,7 @@ func TestImportantExceptionCoversSubdomains(t *testing.T) {
 
 // hosts 重写规则应给出目标地址而不是简单拦截。
 func TestHostsRewriteIPs(t *testing.T) {
-	eng, err := newFilterEngine([]string{"1.2.3.4 hosts-rewritten.example.com\n"})
+	eng, err := newFilterEngine(testLists("1.2.3.4 hosts-rewritten.example.com\n"))
 	if err != nil {
 		t.Fatalf("newFilterEngine: %v", err)
 	}
@@ -157,5 +168,44 @@ func TestBuildBlockResponseModes(t *testing.T) {
 				t.Errorf("mode %s: rcode=%d, want 5", mode, r.Rcode)
 			}
 		}
+	}
+}
+
+// 命中后必须能回查到「命中的是哪个规则集」以及命中的规则原文。
+// 这是审计 filter_list / matched_rule 的数据来源，顺序错位会让归属全错。
+func TestMatchReportsFilterList(t *testing.T) {
+	eng, err := newFilterEngine(testLists(
+		"||first.example.com^\n",
+		"||second.example.com^\n0.0.0.0 hosts-second.example.com\n",
+	))
+	if err != nil {
+		t.Fatalf("newFilterEngine: %v", err)
+	}
+
+	cases := []struct {
+		host     string
+		wantList string
+		wantRule string
+	}{
+		{"first.example.com", "list-1", "||first.example.com^"},
+		{"second.example.com", "list-2", "||second.example.com^"},
+		{"hosts-second.example.com", "list-2", "0.0.0.0 hosts-second.example.com"},
+	}
+	for _, c := range cases {
+		res := eng.match(c.host, 1, netip.Addr{})
+		if !res.Blocked {
+			t.Fatalf("%s: 期望被拦截", c.host)
+		}
+		if got := eng.listName(res.ListID); got != c.wantList {
+			t.Errorf("%s: 规则集=%q, want %q", c.host, got, c.wantList)
+		}
+		if res.Rule != c.wantRule {
+			t.Errorf("%s: 规则原文=%q, want %q", c.host, res.Rule, c.wantRule)
+		}
+	}
+
+	// 例外规则放行时不应产生归属信息（审计侧对放行不做归属）。
+	if res := eng.match("allow.example.com", 1, netip.Addr{}); res.Blocked || res.Rule != "" {
+		t.Errorf("未命中的域名不应产生结果: %+v", res)
 	}
 }

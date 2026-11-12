@@ -349,6 +349,17 @@ func (p *AdguardRule) Exec(_ context.Context, qCtx *query_context.Context) error
 	// 标记命中来源，让审计能区分「广告拦截」与「未分类(unmatched_rule)」。
 	qCtx.StoreValue(query_context.KeyDomainSet, "adguard")
 
+	// 归属信息与规则原文：domain_set 仍是 adguard，另存两个并列 key 供审计展示
+	// 「命中哪个规则集」与「命中的规则原文」。查不到映射时给 unknown/空串。
+	listName := eng.listName(res.ListID)
+	if listName == "" {
+		listName = "adguard:unknown"
+	}
+	qCtx.StoreValue(query_context.KeyFilterList, listName)
+	if res.Rule != "" {
+		qCtx.StoreValue(query_context.KeyMatchedRule, res.Rule)
+	}
+
 	if r := buildBlockResponse(q, question, p.blockMode, res.IPs); r != nil {
 		qCtx.SetResponse(r)
 	}
@@ -523,18 +534,21 @@ func (p *AdguardRule) reloadAllRules(ctx context.Context, initialLoad bool) {
 	// 用 AdGuard 官方 urlfilter 引擎构建过滤器。
 	// 相对自写解析器，这里完整支持 $important / $badfilter / $client / $dnstype /
 	// $denyallow / 路径规则 / hosts 双列规则 / 例外规则优先级，行为对齐 AdGuard Home。
-	texts := make([]string, 0, len(enabledRules))
+	// 列表顺序即 urlfilter 的 ListID 下标，必须与下面构建 names 的顺序一致：
+	// 两边都在同一个循环里按 enabledRules 的顺序追加，读失败的列表两边都不追加，
+	// 因此 rules.ListID(i) 与 listNames[i] 始终指向同一个 config.json 条目。
+	lists := make([]ruleList, 0, len(enabledRules))
 	for _, rule := range enabledRules {
 		data, err := os.ReadFile(rule.localPath)
 		if err != nil {
 			log.Printf("[adguard_rule] WARN: skipping enabled rule '%s', cannot read %s: %v", rule.Name, rule.localPath, err)
 			continue
 		}
-		texts = append(texts, string(data))
+		lists = append(lists, ruleList{Name: rule.Name, Text: string(data)})
 	}
 
-	eng, engErr := newFilterEngine(texts)
-	texts = nil
+	eng, engErr := newFilterEngine(lists)
+	lists = nil
 	if engErr != nil {
 		// 构建失败时保留旧引擎，避免过滤能力瞬间消失。
 		log.Printf("[adguard_rule] ERROR: failed to build urlfilter engine: %v (keeping previous rules)", engErr)

@@ -32,6 +32,11 @@ import (
 const (
 	// KeyDomainSet is the key for storing the matched domain_set name in the context.
 	KeyDomainSet uint32 = iota + 100 // Use a number unlikely to conflict with internal keys.
+	// KeyFilterList 存命中规则所属规则集的展示名（如 config.json 里的列表 name）。
+	// 与 KeyDomainSet 并列：domain_set 的取值体系不变，这里只补归属信息。
+	KeyFilterList
+	// KeyMatchedRule 存命中的规则原文，供审计展示具体命中项。
+	KeyMatchedRule
 )
 
 const (

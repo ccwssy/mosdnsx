@@ -119,9 +119,9 @@ func NewMosdns(cfg *Config) (*Mosdns, error) {
 	RegisterUpdateAPI(m.httpMux)     // For binary updates
 	RegisterSystemAPI(m.httpMux, m)     // For self-restart
 	RegisterUpstreamStatsAPI(m.httpMux, m)
-        RegisterUpstreamAPI(m.httpMux)
-        RegisterListsAPI(m.httpMux)      // 名单插件枚举（按配置文件自动发现）
+	RegisterListsAPI(m.httpMux)      // 名单插件枚举（按配置文件自动发现）
 	RegisterAliasesAPI(m.httpMux) // 客户端别名（IP -> 名字）
+	RegisterLayoutAPI(m.httpMux)  // 首页模块排版（panel_layout.json）
 	RegisterDiagnoseAPI(m.httpMux) // DNS 诊断（真实查询本机 5335）
 
 	// Start http api server
@@ -420,7 +420,11 @@ func (m *Mosdns) initHttpMux() {
 	})
 
 	// A helper page for invalid request.
-	invalidApiReqHelper := func(w http.ResponseWriter, req *http.Request) {
+	// 必须显式写状态码：不写会走 Go 的隐式 200，让「路由已删除」看起来像
+	// 「路由存在但返回了路由表」，历史上排查删路由是否生效就吃过这个亏。
+	invalidApiReqHelper := func(w http.ResponseWriter, req *http.Request, status int) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(status)
 		b := new(bytes.Buffer)
 		_, _ = fmt.Fprintf(b, "Invalid request %s %s\n\n", req.Method, req.RequestURI)
 		b.WriteString("Available api urls:\n")
@@ -433,8 +437,12 @@ func (m *Mosdns) initHttpMux() {
 		})
 		_, _ = w.Write(b.Bytes())
 	}
-	m.httpMux.NotFound(invalidApiReqHelper)
-	m.httpMux.MethodNotAllowed(invalidApiReqHelper)
+	m.httpMux.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		invalidApiReqHelper(w, req, http.StatusNotFound)
+	})
+	m.httpMux.MethodNotAllowed(func(w http.ResponseWriter, req *http.Request) {
+		invalidApiReqHelper(w, req, http.StatusMethodNotAllowed)
+	})
 }
 
 func (m *Mosdns) loadPresetPlugins() error {

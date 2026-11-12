@@ -72,18 +72,37 @@
         #loading-spinner { display: none; width: 40px; height: 40px; border: 4px solid var(--border-color); border-top-color: var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite; margin: 4rem auto; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .loading #loading-spinner { display: block; }
-        .loading #main-content, .loading .control-panel, .loading footer { opacity: 0.5; pointer-events: none; }
+        .loading .module-grid, .loading footer { opacity: 0.5; pointer-events: none; }
         .error-message { color: var(--error-color); font-weight: bold; background-color: rgba(231, 76, 60, 0.1); border: 1px solid var(--error-color); padding: 2rem; border-radius: var(--radius-main); margin: 2rem auto; text-align:center; grid-column: 1 / -1; font-size: 1.2rem; width: fit-content; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
-        .control-panel { display: grid; grid-template-columns: 2fr 1.2fr; gap: 1.2rem; align-items: stretch; width: 100%; max-width: 1800px; }
-        .control-panel:has(#tab-appearance.active) { align-items: start; }
-        .left-column, .right-column { display: flex; flex-direction: column; gap: 1.2rem; }
+        .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.2rem; width: 100%; max-width: 1800px; justify-content: center; }
+        .module-grid:has(#tab-appearance.active) { align-items: start; }
+        .module-grid > [data-module] { min-width: 0; }
+        /* #main-content 现在是网格项内部容器，去掉它在外层布局时代留下的多余外边距 */
+        .module-grid #main-content { margin-bottom: 0; flex-grow: 0; }
+        /* 整宽模块（缓存卡片组）用内联 grid-column: 1 / -1 跨满所有列，内部仍是现成的 #main-content 缓存卡网格 */
+        /* 模块卡片内边距（等价于原左/右列的 padding 规则）；带 tabs 头的卡沿用自身 header/body 内边距 */
+        .module-grid > [data-module] { padding: 1.2rem; }
+        .module-grid > [data-module] > .control-section-body { overflow-y: visible; padding: 0; }
+        .module-grid > [data-module]:has(> .control-section-header) { padding: 0; }
+        .module-grid > [data-module]:has(> .control-section-header) > .control-section-body { padding: 0 1.2rem 1.2rem 1.2rem; }
+        .module-grid > [data-module][draggable="true"] { cursor: grab; }
+        .module-grid > [data-module].dragging { opacity: 0.45; }
+        .module-grid > [data-module].drag-over { outline: 2px dashed var(--accent-color); outline-offset: 2px; }
+        /* DNS 请求记录摘要：最近 8 条 */
+        .audit-recent-list { display: flex; flex-direction: column; }
+        .audit-recent-item { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, auto) auto; align-items: center; gap: 0.6rem; font-size: 0.9rem; padding: 0.45rem 0; border-bottom: 1px solid var(--border-color); }
+        .audit-recent-item:last-child { border-bottom: none; }
+        .audit-recent-time { color: var(--label-color); font-variant-numeric: tabular-nums; }
+        .audit-recent-domain { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .audit-recent-client { color: var(--label-color); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .audit-recent-tag { padding: 0.15rem 0.5rem; border-radius: var(--radius-control); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+        .rule-tag.audit-recent-tag { color: var(--error-color); background-color: rgba(231, 76, 60, 0.12); }
+        .response-tag.noerror.audit-recent-tag { color: var(--status-green); background-color: rgba(46, 204, 113, 0.12); }
+        .audit-recent-empty { color: var(--label-color); font-size: 0.9rem; margin: 0; }
         .control-section { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-main); box-shadow: var(--card-shadow); display: flex; flex-direction: column; overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; }
         .control-section:hover { box-shadow: var(--card-shadow-hover); }
-        .right-column .control-section { flex-grow: 1; padding: 0; }
         .control-section-header { padding: 1.2rem; flex-shrink: 0; }
         .control-section-body { flex-grow: 1; overflow-y: auto; padding: 0 1.2rem 1.2rem 1.2rem; min-height: 0; display: flex; flex-direction: column; }
-        .left-column .control-section { padding: 1.2rem; }
-        .left-column .control-section-body { overflow-y: visible; padding: 0; }
         .section-title { font-size: 1.1rem; font-weight: 600; color: var(--text-color); margin: 0 0 1rem 0; padding-bottom: 0.7rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 0.7rem; flex-shrink: 0; }
         .section-title .fas, .section-title .fa-solid, .section-title .fa-brands { color: var(--accent-color); font-size: 1.1em; opacity: 0.9; }
         .control-section-body > *:not(.subsection-title) + *:not(.subsection-title) { margin-top: 1rem; }
@@ -109,10 +128,10 @@
         }
 
         /* NEW/MODIFIED: Apply consistent button styling to all relevant buttons */
-        #dns-log-page-btn,
         #refresh-now-btn,
         #start-capture-btn, 
         #get-logs-btn,
+        #audit-view-all-btn,
         #diagnose-btn { 
             background-color: var(--control-bg);
             color: var(--control-text);
@@ -131,10 +150,10 @@
         }
         
         /* NEW/MODIFIED: Hover styles for all consistent buttons */
-        #dns-log-page-btn:hover,
         #refresh-now-btn:hover,
         #start-capture-btn:hover, 
         #get-logs-btn:hover,
+        #audit-view-all-btn:hover,
         #diagnose-btn:hover { 
             background-color: var(--control-hover-bg);
             border-color: var(--accent-color);
@@ -176,9 +195,9 @@
         }
         
         /* NEW: Ensure icons within these buttons are consistently sized */
-        #dns-log-page-btn .fas,
         #refresh-now-btn .fas,
         #start-capture-btn .fas,
+        #audit-view-all-btn .fas,
         #get-logs-btn .fas {
             font-size: 1em; /* Ensures icon size scales with button text size */
         }
@@ -664,7 +683,7 @@
         }
         /* MODIFICATION END */
 
-        @media (max-width: 1200px) { .control-panel { grid-template-columns: 1fr; } }
+        @media (max-width: 1200px) { .module-grid { grid-template-columns: 1fr; } }
         
         @media (max-width: 768px) { 
             html { font-size: 14.5px; }
@@ -673,8 +692,7 @@
             .card { padding: 1.2rem; }
             h2 { font-size: 1.3rem; }
             .chart-container { width: 90px; height: 90px; }
-            .control-panel { gap: 1.5rem; }
-            .left-column { gap: 1.5rem; }
+            .module-grid { gap: 1.5rem; grid-template-columns: 1fr; }
             .info-panel-tabs { flex-wrap: wrap; overflow-x: auto; border-bottom: none; margin: 0; padding-bottom: 0.5rem; gap: 0.5rem; scrollbar-width: none; }
             .info-panel-tabs::-webkit-scrollbar { display: none; }
             .tab-button { flex: 1 1 auto; min-width: 90px; background-color: var(--control-bg); border: 1px solid var(--control-border); color: var(--control-text); border-radius: var(--radius-control); text-align: center; justify-content: center; padding: 0.6rem 0.5rem; font-size: 0.9rem; }
@@ -716,158 +734,135 @@
 <body>
     <div class="header"><h1>MosDNS 监控面板</h1><div class="header-gradient-bar"></div></div>
     <div id="loading-spinner"></div>
-    <div id="main-content" class="main-container"></div>
-    <div class="control-panel">
-        <div class="left-column">
-            <section class="control-section">
-                <div class="control-section-body">
-                    <h4 class="section-title"><i class="fas fa-cogs"></i> 控制中心</h4>
-                    
-                    <!-- MODIFICATION START: Combined control bar and style alignment -->
-                    <div class="refresh-action-bar">
-                        <div class="control-group">
-                            <label for="auto-refresh-toggle" class="auto-refresh-control">
-                                <span class="switch-label-text">自动刷新</span>
-                                <input type="checkbox" id="auto-refresh-toggle" class="generic-switch-input">
+    <!-- 模块网格：单一布局容器，模块顺序由 /api/v1/layout/ 决定，可拖拽换位 -->
+    <div class="module-grid" id="module-grid">
+        <!-- cache-group：缓存卡片组整宽区，内部沿用现成的 #main-content 缓存卡网格（createCacheCard 仍 append 到这里） -->
+        <!-- 整宽模块跨行换位无意义，故登记进布局数组、也带 data-module，但永不设置 draggable -->
+        <div data-module="cache-group" style="grid-column: 1 / -1;">
+            <div id="main-content" class="main-container"></div>
+        </div>
+        <!-- control-center：控制 / 数据查看 / DNS 诊断 三个分区合并为一张操作卡 -->
+        <section class="control-section" data-module="control-center">
+            <div class="control-section-body">
+                <h5 class="subsection-title">控制</h5>
+                <!-- MODIFICATION START: Combined control bar and style alignment -->
+                <div class="refresh-action-bar">
+                    <div class="control-group">
+                        <label for="auto-refresh-toggle" class="auto-refresh-control">
+                            <span class="switch-label-text">自动刷新</span>
+                            <input type="checkbox" id="auto-refresh-toggle" class="generic-switch-input">
+                            <span class="generic-switch-slider"></span>
+                        </label>
+                        <button id="refresh-now-btn" class="btn"><i class="fas fa-sync-alt"></i> 立即刷新</button>
+                    </div>
+
+                    <div class="control-separator"></div>
+
+                    <div class="control-group">
+                        <button id="start-capture-btn" class="btn">
+                            <i class="fas fa-bug"></i> 日志抓取
+                        </button>
+                        <input type="number" id="capture-duration-input" value="15" min="1" max="600">
+                        <span class="duration-unit">秒</span>
+                        <i class="fas fa-info-circle info-tooltip-icon" data-tooltip="点击开始抓取。到期后debug会自动关闭，日志在获取一次后自动清空。"></i>
+                        <button id="get-logs-btn" class="btn">
+                            <i class="fas fa-search"></i> 分析日志
+                        </button>
+                    </div>
+                </div>
+                <!-- MODIFICATION END -->
+
+                <div class="rule-actions-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                    <div class="button-group-inline"><button id="flush-cache-btn" class="btn"><i class="fas fa-broom"></i> 清空全部缓存</button><button id="restart-mosdns-btn" class="btn danger"><i class="fas fa-redo"></i> 重启 MosDNS</button></div>
+                </div>
+
+                <h5 class="subsection-title">数据查看</h5>
+                <div class="data-view-group" id="data-view-buttons"></div>
+
+                <h5 class="subsection-title">DNS 诊断</h5>
+                <!-- DNS 诊断：请求 /api/v1/diagnose 后以键值表展示结果 -->
+                <div class="control-group" style="gap: .6rem; flex-wrap: wrap;">
+                    <input type="text" id="diagnose-name" placeholder="example.com" style="width: 220px; height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0.6rem 0.9rem;" />
+                    <select id="diagnose-type" style="height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0 .6rem;">
+                        <option value="A">A</option>
+                        <option value="AAAA">AAAA</option>
+                    </select>
+                    <button id="diagnose-btn" class="btn"><i class="fas fa-vial"></i> 测试</button>
+                </div>
+                <div class="metrics-container" id="diagnose-result" style="margin-top: 1rem;">
+                    <div class="metric-label"><i class="fas fa-crosshairs"></i> <span>命中规则:</span></div>
+                    <div class="metric-value" id="diagnose-domain-set">-</div>
+                    <div class="metric-label"><i class="fas fa-stopwatch"></i> <span>耗时:</span></div>
+                    <div class="metric-value" id="diagnose-duration">-</div>
+                    <div class="metric-label"><i class="fas fa-reply"></i> <span>应答:</span></div>
+                    <div class="metric-value" id="diagnose-answers" style="white-space: pre-line;">-</div>
+                    <div class="metric-label"><i class="fas fa-user-secret"></i> <span>是否 fake-ip:</span></div>
+                    <div class="metric-value" id="diagnose-fakeip">-</div>
+                    <div class="metric-label"><i class="fas fa-signal"></i> <span>rcode:</span></div>
+                    <div class="metric-value" id="diagnose-rcode">-</div>
+                </div>
+            </div>
+        </section>
+        <!-- 广告过滤总开关：紧贴系统信息区，状态一律以 /plugins/adguard/enabled 的服务端返回为准 -->
+        <section class="control-section" data-module="adguard-filter" style="flex-grow: 0; padding: 1.2rem;">
+            <h4 class="section-title"><i class="fas fa-shield-alt"></i> 广告过滤</h4>
+            <div class="control-group" style="align-items: center; gap: .8rem; flex-wrap: wrap;">
+                <label for="adguard-enabled-toggle" class="auto-refresh-control">
+                    <span class="switch-label-text" id="adguard-state-text">广告过滤: 读取中…</span>
+                    <input type="checkbox" id="adguard-enabled-toggle" class="generic-switch-input">
+                    <span class="generic-switch-slider"></span>
+                </label>
+                <span class="hint" style="color: var(--label-color);">切换后回读服务端状态</span>
+            </div>
+        </section>
+        <!-- DNS 请求记录摘要：吸收原「今日统计」卡（metrics-today-stats 原样搬入），数据源 /api/v2/audit/stats + /api/v2/audit/logs -->
+        <section class="control-section" data-module="audit-summary">
+            <h4 class="section-title"><i class="fas fa-history"></i> DNS 请求记录摘要</h4>
+            <div class="metrics-container" id="metrics-today-stats"></div>
+            <h5 class="subsection-title">最近 8 条请求</h5>
+            <div class="audit-recent-list" id="audit-recent-list">
+                <p class="audit-recent-empty">读取中…</p>
+            </div>
+            <div style="margin-top: 1rem;">
+                <button id="audit-view-all-btn" class="btn"><i class="fas fa-list-alt"></i> 查看全部日志</button>
+            </div>
+        </section>
+        <section class="control-section" data-module="system-info">
+            <div class="control-section-header">
+                <div class="info-panel-tabs">
+                    <button class="tab-button active" data-tab="system-info"><i class="fas fa-server"></i> 系统信息</button>
+                    <button class="tab-button" data-tab="appearance"><i class="fas fa-palette"></i> 外观设置</button>
+                    <a class="tab-button" href="/log#list-mgmt" id="goto-list-mgmt-btn"><i class="fas fa-list-alt"></i> 名单管理</a>
+                </div>
+            </div>
+            <div class="control-section-body">
+                <div id="tab-system-info" class="tab-content active">
+                    <div class="metrics-container" id="metrics-system"></div>
+                    <p id="last_updated"><i class="fas fa-clock"></i> </p>
+                </div>
+                <div id="tab-appearance" class="tab-content">
+                    <div id="appearance-container">
+                        <h5 class="subsection-title">主题切换</h5>
+                        <div class="theme-selector" id="theme-selector"></div>
+                        <h5 class="subsection-title">自定义背景</h5>
+                        <div class="button-group-inline">
+                            <button id="set-bg-btn" class="btn"><i class="fas fa-image"></i> 设置背景 URL</button>
+                            <button id="remove-bg-btn" class="btn danger"><i class="fas fa-trash"></i> 移除背景</button>
+                        </div>
+                        <h5 class="subsection-title">毛玻璃强度</h5>
+                        <div class="blur-control">
+                            <label for="blur-toggle" class="switch-label">
+                                <input type="checkbox" id="blur-toggle" class="generic-switch-input">
                                 <span class="generic-switch-slider"></span>
                             </label>
-                            <button id="refresh-now-btn" class="btn"><i class="fas fa-sync-alt"></i> 立即刷新</button>
+                            <input type="range" id="blur-slider" min="0" max="30" value="12" step="1">
                         </div>
-
-                        <div class="control-separator"></div>
-
-                        <div class="control-group">
-                            <button id="start-capture-btn" class="btn">
-                                <i class="fas fa-bug"></i> 日志抓取
-                            </button>
-                            <input type="number" id="capture-duration-input" value="15" min="1" max="600">
-                            <span class="duration-unit">秒</span>
-                            <i class="fas fa-info-circle info-tooltip-icon" data-tooltip="点击开始抓取。到期后debug会自动关闭，日志在获取一次后自动清空。"></i>
-                            <button id="get-logs-btn" class="btn">
-                                <i class="fas fa-search"></i> 分析日志
-                            </button>
-                            <button id="dns-log-page-btn" class="btn">
-                                <i class="fas fa-list-alt"></i> DNS请求记录
-                            </button>
-                        </div>
-                    </div>
-                    <!-- MODIFICATION END -->
-
-                    <div class="rule-actions-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                        <div class="button-group-inline"><button id="flush-cache-btn" class="btn"><i class="fas fa-broom"></i> 清空全部缓存</button><button id="restart-mosdns-btn" class="btn danger"><i class="fas fa-redo"></i> 重启 MosDNS</button></div>
-                    </div>
-
-                    <!-- 覆盖配置：socks5 与 ECS -->
-                    <div class="overrides-section" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                        <h4 class="section-title"><i class="fas fa-sliders-h"></i> 覆盖配置</h4>
-                        <div class="control-group" style="align-items: center; gap: .6rem; flex-wrap: wrap;">
-                            <label class="control-base-label" for="p-override-socks5" style="min-width: 86px;">socks5 代理</label>
-                            <input type="text" id="p-override-socks5" placeholder="host:port" style="width: 220px;" />
-                            <span class="hint" style="color: var(--label-color);">留空表示不覆盖</span>
-                        </div>
-                        <div class="control-group" style="align-items: center; gap: .6rem; margin-top: .6rem; flex-wrap: wrap;">
-                            <label class="control-base-label" for="p-override-ecs" style="min-width: 86px;">ECS IP</label>
-                            <input type="text" id="p-override-ecs" placeholder="IPv4 / IPv6" style="width: 220px;" />
-                            <span class="hint" style="color: var(--label-color);">留空表示不覆盖</span>
-                        </div>
-                        <div class="button-group-inline" style="margin-top: .8rem; gap: .6rem;">
-                            <button id="p-overrides-load-btn" class="btn"><i class="fas fa-download"></i> 读取当前</button>
-                            <button id="p-overrides-save-btn" class="btn"><i class="fas fa-upload"></i> 保存</button>
-                        </div>
-                        <p class="subtle-tip" style="margin-top: .4rem; color: var(--label-color);">
-                            保存后需重启 MosDNS 生效。
-                        </p>
+                        <h5 class="subsection-title">显示缓存卡片</h5>
+                        <div class="card-toggle-group" id="card-toggles"></div>
                     </div>
                 </div>
-            </section>
-            <section class="control-section">
-                 <div class="control-section-body">
-                    <h4 class="section-title"><i class="fas fa-eye"></i> 数据查看</h4>
-                    <div class="data-view-group" id="data-view-buttons"></div>
-                </div>
-            </section>
-            <section class="control-section">
-                <div class="control-section-body">
-                    <h4 class="section-title"><i class="fas fa-stethoscope"></i> DNS 诊断</h4>
-                    <!-- DNS 诊断：请求 /api/v1/diagnose 后以键值表展示结果 -->
-                    <div class="control-group" style="gap: .6rem; flex-wrap: wrap;">
-                        <input type="text" id="diagnose-name" placeholder="example.com" style="width: 220px; height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0.6rem 0.9rem;" />
-                        <select id="diagnose-type" style="height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0 .6rem;">
-                            <option value="A">A</option>
-                            <option value="AAAA">AAAA</option>
-                        </select>
-                        <button id="diagnose-btn" class="btn"><i class="fas fa-vial"></i> 测试</button>
-                    </div>
-                    <div class="metrics-container" id="diagnose-result" style="margin-top: 1rem;">
-                        <div class="metric-label"><i class="fas fa-crosshairs"></i> <span>命中规则:</span></div>
-                        <div class="metric-value" id="diagnose-domain-set">-</div>
-                        <div class="metric-label"><i class="fas fa-stopwatch"></i> <span>耗时:</span></div>
-                        <div class="metric-value" id="diagnose-duration">-</div>
-                        <div class="metric-label"><i class="fas fa-reply"></i> <span>应答:</span></div>
-                        <div class="metric-value" id="diagnose-answers" style="white-space: pre-line;">-</div>
-                        <div class="metric-label"><i class="fas fa-user-secret"></i> <span>是否 fake-ip:</span></div>
-                        <div class="metric-value" id="diagnose-fakeip">-</div>
-                        <div class="metric-label"><i class="fas fa-signal"></i> <span>rcode:</span></div>
-                        <div class="metric-value" id="diagnose-rcode">-</div>
-                    </div>
-                </div>
-            </section>
-        </div>
-        <div class="right-column">
-            <!-- 广告过滤总开关：紧贴系统信息区，状态一律以 /plugins/adguard/enabled 的服务端返回为准 -->
-            <section class="control-section" style="flex-grow: 0; padding: 1.2rem;">
-                <h4 class="section-title"><i class="fas fa-shield-alt"></i> 广告过滤</h4>
-                <div class="control-group" style="align-items: center; gap: .8rem; flex-wrap: wrap;">
-                    <label for="adguard-enabled-toggle" class="auto-refresh-control">
-                        <span class="switch-label-text" id="adguard-state-text">广告过滤: 读取中…</span>
-                        <input type="checkbox" id="adguard-enabled-toggle" class="generic-switch-input">
-                        <span class="generic-switch-slider"></span>
-                    </label>
-                    <span class="hint" style="color: var(--label-color);">切换后回读服务端状态</span>
-                </div>
-            </section>
-            <!-- 今日统计：/api/v2/audit/stats 的今日查询 / 拦截 / 拦截率三行键值 -->
-            <section class="control-section" style="flex-grow: 0; padding: 1.2rem;">
-                <h4 class="section-title"><i class="fas fa-chart-pie"></i> 今日统计</h4>
-                <div class="metrics-container" id="metrics-today-stats"></div>
-            </section>
-             <section class="control-section">
-                <div class="control-section-header">
-                    <div class="info-panel-tabs">
-                        <button class="tab-button active" data-tab="system-info"><i class="fas fa-server"></i> 系统信息</button>
-                        <button class="tab-button" data-tab="appearance"><i class="fas fa-palette"></i> 外观设置</button>
-                        <a class="tab-button" href="/log#list-mgmt" id="goto-list-mgmt-btn"><i class="fas fa-list-alt"></i> 名单管理</a>
-                    </div>
-                </div>
-                <div class="control-section-body">
-                    <div id="tab-system-info" class="tab-content active">
-                        <div class="metrics-container" id="metrics-system"></div>
-                        <p id="last_updated"><i class="fas fa-clock"></i> </p>
-                    </div>
-                    <div id="tab-appearance" class="tab-content">
-                        <div id="appearance-container">
-                            <h5 class="subsection-title">主题切换</h5>
-                            <div class="theme-selector" id="theme-selector"></div>
-                            <h5 class="subsection-title">自定义背景</h5>
-                            <div class="button-group-inline">
-                                <button id="set-bg-btn" class="btn"><i class="fas fa-image"></i> 设置背景 URL</button>
-                                <button id="remove-bg-btn" class="btn danger"><i class="fas fa-trash"></i> 移除背景</button>
-                            </div>
-                            <h5 class="subsection-title">毛玻璃强度</h5>
-                            <div class="blur-control">
-                                <label for="blur-toggle" class="switch-label">
-                                    <input type="checkbox" id="blur-toggle" class="generic-switch-input">
-                                    <span class="generic-switch-slider"></span>
-                                </label>
-                                <input type="range" id="blur-slider" min="0" max="30" value="12" step="1">
-                            </div>
-                            <h5 class="subsection-title">显示缓存卡片</h5>
-                            <div class="card-toggle-group" id="card-toggles"></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
+            </div>
+        </section>
     </div>
 
     <!-- MODIFICATION START: Log capture section now has fixed light theme styling -->
@@ -1248,40 +1243,6 @@
             return response;
         }
 
-        // 覆盖配置：加载与保存（移动版表单）
-        async function pLoadOverridesToForm() {
-            try {
-                const res = await fetch('/api/v1/overrides');
-                if (!res.ok) throw new Error(`加载覆盖配置失败: ${res.status}`);
-                const data = await res.json();
-                getById('p-override-socks5').value = (data && data.socks5) || '';
-                getById('p-override-ecs').value = (data && data.ecs) || '';
-            } catch (e) {
-                showToast('读取覆盖配置失败', 'error');
-                console.error(e);
-            }
-        }
-
-        async function pSaveOverridesFromForm() {
-            const socks5 = getById('p-override-socks5').value.trim();
-            const ecs = getById('p-override-ecs').value.trim();
-            const payload = {};
-            if (socks5) payload.socks5 = socks5;
-            if (ecs) payload.ecs = ecs;
-            if (Object.keys(payload).length === 0) {
-                showToast('没有可保存的覆盖项');
-                return;
-            }
-            try {
-                const res = await postApi('/api/v1/overrides', payload);
-                await res.text();
-                showToast('覆盖配置已保存');
-            } catch (e) {
-                showToast('保存覆盖配置失败', 'error');
-                showErrorModal(e.message || '保存失败');
-            }
-        }
-
         // DNS 诊断：请求 /api/v1/diagnose 并展示结果
         const diagnoseFields = ['diagnose-domain-set', 'diagnose-duration', 'diagnose-answers', 'diagnose-fakeip', 'diagnose-rcode'];
         function setDiagnoseResult(values) {
@@ -1631,13 +1592,145 @@
             }
         }
 
+        // --- 模块布局（顺序存服务端 panel_layout.json，前端不写 localStorage）---
+        // 默认顺序即契约冻结的首页模块标识清单，非 tag 枚举
+        const DEFAULT_MODULE_LAYOUT = ['cache-group', 'control-center', 'adguard-filter', 'audit-summary', 'system-info'];
+        const MODULE_LAYOUT_TIMEOUT = 3000;
+        let moduleLayout = DEFAULT_MODULE_LAYOUT.slice();
+        let moduleLayoutSaveTimer = null;
+
+        function moduleGridNodes() {
+            const grid = getById('module-grid');
+            return grid ? Array.from(grid.querySelectorAll('[data-module]')) : [];
+        }
+
+        // 已知 id 按存档顺序排前，未出现的已知模块按默认顺序补末尾，未知 id 忽略
+        function normalizeModuleLayout(saved) {
+            const order = [];
+            (Array.isArray(saved) ? saved : []).forEach(id => {
+                if (typeof id === 'string' && DEFAULT_MODULE_LAYOUT.includes(id) && !order.includes(id)) order.push(id);
+            });
+            DEFAULT_MODULE_LAYOUT.forEach(id => { if (!order.includes(id)) order.push(id); });
+            return order;
+        }
+
+        function applyModuleLayout(order) {
+            const grid = getById('module-grid');
+            if (!grid) return;
+            moduleLayout = normalizeModuleLayout(order);
+            moduleLayout.forEach((id, index) => {
+                const node = grid.querySelector('[data-module="' + id + '"]');
+                if (node) node.style.order = String(index);
+            });
+        }
+
+        // GET /api/v1/layout/ -> 裸 JSON 数组；失败/超时静默降级为默认顺序
+        async function loadModuleLayout() {
+            if (!getById('module-grid')) return;
+            let saved = null;
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = controller ? setTimeout(() => controller.abort(), MODULE_LAYOUT_TIMEOUT) : null;
+            try {
+                const res = await fetch('/api/v1/layout/', controller ? { signal: controller.signal } : undefined);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data)) saved = data;
+                }
+            } catch (e) {
+                // 读取失败或超时：静默降级为默认顺序，绝不阻塞页面初始化
+                saved = null;
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+            applyModuleLayout(saved === null ? DEFAULT_MODULE_LAYOUT.slice() : saved);
+        }
+
+        // POST /api/v1/layout/ -> 发送完整顺序；失败提示但保持本次会话内已生效的顺序
+        async function saveModuleLayout(order) {
+            try {
+                const res = await fetch('/api/v1/layout/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(order)
+                });
+                if (!res.ok) throw new Error('保存布局失败: ' + res.status);
+            } catch (e) {
+                showToast('布局保存失败（本次会话内仍生效）', 'error');
+            }
+        }
+
+        function scheduleModuleLayoutSave() {
+            if (moduleLayoutSaveTimer) clearTimeout(moduleLayoutSaveTimer);
+            moduleLayoutSaveTimer = setTimeout(() => {
+                moduleLayoutSaveTimer = null;
+                saveModuleLayout(moduleLayout.slice());
+            }, 500);
+        }
+
+        // 把 sourceId 移到 targetId 之前或之后，立即重排并防抖持久化
+        function moveModule(sourceId, targetId, placeBefore) {
+            if (!sourceId || !targetId || sourceId === targetId) return;
+            const order = moduleLayout.slice();
+            const from = order.indexOf(sourceId);
+            if (from < 0) return;
+            order.splice(from, 1);
+            const to = order.indexOf(targetId);
+            if (to < 0) return;
+            order.splice(placeBefore ? to : to + 1, 0, sourceId);
+            applyModuleLayout(order);
+            scheduleModuleLayoutSave();
+        }
+
+        function setupModuleDragAndDrop() {
+            const grid = getById('module-grid');
+            if (!grid) return;
+            // 移动端不做拖拽：只有 hover + 精细指针的环境才设置 draggable
+            const canDrag = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
+            let draggingId = null;
+            moduleGridNodes().forEach(node => {
+                const moduleId = node.dataset.module;
+                // cache-group 是整宽区，跨行换位无意义，登记进布局但不设 draggable
+                if (canDrag && moduleId !== 'cache-group') {
+                    node.setAttribute('draggable', 'true');
+                    node.addEventListener('dragstart', (e) => {
+                        draggingId = moduleId;
+                        node.classList.add('dragging');
+                        if (e.dataTransfer) {
+                            e.dataTransfer.setData('text/plain', moduleId);
+                            e.dataTransfer.effectAllowed = 'move';
+                        }
+                    });
+                    node.addEventListener('dragend', () => {
+                        draggingId = null;
+                        node.classList.remove('dragging');
+                        moduleGridNodes().forEach(peer => peer.classList.remove('drag-over'));
+                    });
+                }
+                node.addEventListener('dragover', (e) => {
+                    if (!draggingId || draggingId === moduleId) return;
+                    e.preventDefault();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                    node.classList.add('drag-over');
+                });
+                node.addEventListener('dragleave', () => node.classList.remove('drag-over'));
+                node.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    node.classList.remove('drag-over');
+                    const sourceId = draggingId || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
+                    if (!sourceId || sourceId === moduleId) return;
+                    const rect = node.getBoundingClientRect();
+                    // 落点在目标上半区插到前面，下半区插到后面
+                    moveModule(sourceId, moduleId, e.clientY < rect.top + rect.height / 2);
+                });
+            });
+        }
         function setupEventListeners() {
             getById('refresh-now-btn').onclick = () => { refreshData(false, true); showToast('数据已手动刷新'); };
             const autoRefreshToggle = getById('auto-refresh-toggle');
             autoRefreshToggle.onchange = (e) => { const isEnabled = e.target.checked; localStorage.setItem('autoRefresh', isEnabled); if (isEnabled) { if (!autoRefreshTimer) autoRefreshTimer = setInterval(() => refreshData(false, true), REFRESH_INTERVAL); } else if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; } };
 
             getById('flush-cache-btn').addEventListener('click', async () => { if (!confirm('确定清空全部缓存吗? 此操作将根据当前核心运行模式清空对应的缓存。')) { return; } const cacheToFlush = 'cache'; const path = `/plugins/${cacheToFlush}/flush`; try { const response = await fetch(path); if (!response.ok) { const errorText = await response.text(); throw new Error(`清空缓存失败于 ${path}: ${errorText || response.statusText}`); } showToast('全部缓存已清空，正在刷新数据...', 'success'); await refreshData(false, true); } catch (e) { showToast('清空缓存操作失败！', 'error'); showErrorModal(e.message); } });
-            getById('restart-mosdns-btn').onclick = async () => { if (confirm('【危险操作】此操作将重启 MosDNS。确定要继续吗?')) { try { const response = await fetch('/api/v1/system/restart', { method: 'POST' }); if (!response.ok) { const errorText = await response.text(); throw new Error(errorText || `重启命令请求失败，状态码: ${response.status}`); } showToast('MosDNS 正在重启，页面即将刷新...'); setTimeout(() => location.reload(), 2000); } catch (e) { showToast('重启命令发送失败', 'error'); showErrorModal(e.message); } } };getById('dns-log-page-btn').onclick = () => { window.open(`${window.location.origin}/log`, '_blank'); };
+            getById('restart-mosdns-btn').onclick = async () => { if (confirm('【危险操作】此操作将重启 MosDNS。确定要继续吗?')) { try { const response = await fetch('/api/v1/system/restart', { method: 'POST' }); if (!response.ok) { const errorText = await response.text(); throw new Error(errorText || `重启命令请求失败，状态码: ${response.status}`); } showToast('MosDNS 正在重启，页面即将刷新...'); setTimeout(() => location.reload(), 2000); } catch (e) { showToast('重启命令发送失败', 'error'); showErrorModal(e.message); } } };
             
             renderDataViewButtons();
             
@@ -1648,11 +1741,9 @@
             getById('set-bg-btn').onclick = () => { const url = prompt('请输入背景图片的 URL 或本地绝对路径:', localStorage.getItem('customBackgroundUrl') || ''); if(url !== null) setBackgroundImage(url); };
             getById('remove-bg-btn').onclick = () => { if(confirm('确定移除自定义背景吗?')) setBackgroundImage(''); };
 
-            // 覆盖配置按钮事件（移动版）
-            const pLoadBtn = getById('p-overrides-load-btn');
-            const pSaveBtn = getById('p-overrides-save-btn');
-            if (pLoadBtn) pLoadBtn.onclick = () => pLoadOverridesToForm().then(() => showToast('已读取当前覆盖配置'));
-            if (pSaveBtn) pSaveBtn.onclick = () => pSaveOverridesFromForm();
+            // 「查看全部日志」在新标签打开日志页（承接原 DNS 请求记录按钮的入口）
+            const auditViewAllBtn = getById('audit-view-all-btn');
+            if (auditViewAllBtn) auditViewAllBtn.onclick = () => window.open(window.location.origin + '/log', '_blank');
             const diagnoseBtn = getById('diagnose-btn');
             if (diagnoseBtn) diagnoseBtn.onclick = runDnsDiagnose;
             const diagnoseNameInput = getById('diagnose-name');
@@ -1984,30 +2075,129 @@
             if (toggle) toggle.disabled = false;
         }
 
-        // 今日统计：today_queries / blocked_queries / blocked_ratio（0~1 浮点按百分比展示）
-        async function loadTodayStats() {
+        // DNS 请求记录摘要：统计三行取自 /api/v2/audit/stats，任一项失败显示 --
+        function renderTodayStats(values) {
             const container = getById('metrics-today-stats');
             if (!container) return;
+            const rows = [
+                { icon: 'fa-search', label: '今日查询', value: values.today },
+                { icon: 'fa-ban', label: '拦截', value: values.blocked },
+                { icon: 'fa-percent', label: '拦截率', value: values.ratio, accent: true }
+            ];
+            container.innerHTML = '';
+            rows.forEach(function (m) {
+                const labelEl = createElement('div', 'metric-label');
+                labelEl.innerHTML = '<i class="fas ' + m.icon + '"></i> <span>' + m.label + ':</span>';
+                const valueEl = createElement('div', 'metric-value' + (m.accent ? ' accent' : ''));
+                valueEl.innerText = m.value;
+                container.append(labelEl, valueEl);
+            });
+        }
+
+        // 今日统计：today_queries / blocked_queries / blocked_ratio（0~1 浮点按百分比展示）
+        async function loadTodayStats() {
+            if (!getById('metrics-today-stats')) return;
             try {
                 const res = await fetch('/api/v2/audit/stats');
                 if (!res.ok) throw new Error('读取今日统计失败: ' + res.status);
                 const data = await res.json();
                 const ratio = typeof data.blocked_ratio === 'number' ? data.blocked_ratio : 0;
-                const rows = [
-                    { icon: 'fa-search', label: '今日查询', value: formatNumber(data.today_queries || 0) },
-                    { icon: 'fa-ban', label: '拦截', value: formatNumber(data.blocked_queries || 0) },
-                    { icon: 'fa-percent', label: '拦截率', value: (ratio * 100).toFixed(1) + '%', accent: true }
-                ];
-                container.innerHTML = '';
-                rows.forEach(function (m) {
-                    const labelEl = createElement('div', 'metric-label');
-                    labelEl.innerHTML = '<i class="fas ' + m.icon + '"></i> <span>' + m.label + ':</span>';
-                    const valueEl = createElement('div', 'metric-value' + (m.accent ? ' accent' : ''));
-                    valueEl.innerText = m.value;
-                    container.append(labelEl, valueEl);
+                renderTodayStats({
+                    today: formatNumber(data.today_queries || 0),
+                    blocked: formatNumber(data.blocked_queries || 0),
+                    ratio: (ratio * 100).toFixed(1) + '%'
                 });
             } catch (e) {
-                container.innerHTML = '<div class="metric-label"><i class="fas fa-exclamation-triangle"></i> <span>今日统计:</span></div><div class="metric-value">获取失败</div>';
+                renderTodayStats({ today: '--', blocked: '--', ratio: '--' });
+            }
+        }
+
+        // 客户端别名表：懒加载一次并缓存，失败时只用 client_name / IP 两级回退
+        let clientAliasTable = null;
+        async function loadClientAliases() {
+            if (clientAliasTable) return clientAliasTable;
+            try {
+                const res = await fetch('/api/v1/aliases');
+                if (!res.ok) throw new Error('读取客户端别名失败: ' + res.status);
+                const data = await res.json();
+                clientAliasTable = data && typeof data === 'object' ? data : {};
+            } catch (e) {
+                clientAliasTable = {};
+            }
+            return clientAliasTable;
+        }
+
+        // 与日志页同规则：双栈形式 ::ffff:127.0.0.1 归一化为 127.0.0.1 再查别名表
+        function normalizeClientIP(ip) {
+            if (typeof ip === 'string' && ip.startsWith('::ffff:')) {
+                return ip.substring(7);
+            }
+            return ip;
+        }
+
+        function auditClientLabel(log, aliases) {
+            if (log.client_name) return log.client_name;
+            const rawIp = log.client_ip || '';
+            const normalizedIp = normalizeClientIP(rawIp);
+            if (normalizedIp && aliases && aliases[normalizedIp]) return aliases[normalizedIp];
+            return rawIp || '--';
+        }
+
+        // 是否拦截：以服务端字段为准，不从 rcode 反推
+        // NXDOMAIN 不等于被拦截：域名本身不存在也会 NXDOMAIN，拦截以 domain_set === 'adguard' 为准
+        function isBlockedAuditLog(log) {
+            if (!log) return false;
+            if (log.domain_set === 'adguard') return true;
+            const answers = Array.isArray(log.answers) ? log.answers : [];
+            if (!answers.length) return false;
+            return answers.every(a => {
+                const data = String((a && a.data) || '').trim();
+                return data === '0.0.0.0' || data === '::';
+            });
+        }
+
+        // 审计时间戳转 H:M:S，解析失败显示 --
+        function formatAuditTime(value) {
+            const time = new Date(value);
+            if (isNaN(time.getTime())) return '--';
+            return time.toLocaleTimeString('it-IT');
+        }
+
+        function renderAuditRecent(logs, aliases) {
+            const container = getById('audit-recent-list');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!logs.length) {
+                container.appendChild(createElement('p', 'audit-recent-empty', '暂无请求记录'));
+                return;
+            }
+            logs.forEach(log => {
+                const item = createElement('div', 'audit-recent-item');
+                const blocked = isBlockedAuditLog(log);
+                const tag = createElement('span', (blocked ? 'rule-tag' : 'response-tag noerror') + ' audit-recent-tag', blocked ? '已拦截' : '未拦截');
+                item.append(
+                    createElement('span', 'audit-recent-time', formatAuditTime(log.query_time)),
+                    createElement('span', 'audit-recent-domain', log.query_name || '--'),
+                    createElement('span', 'audit-recent-client', auditClientLabel(log, aliases)),
+                    tag
+                );
+                container.appendChild(item);
+            });
+        }
+
+        // 最近 8 条：/api/v2/audit/logs 默认即最新在前，不传排序参数
+        async function loadAuditRecent() {
+            const container = getById('audit-recent-list');
+            if (!container) return;
+            try {
+                const aliases = await loadClientAliases();
+                const res = await fetch('/api/v2/audit/logs?page=1&limit=8');
+                if (!res.ok) throw new Error('读取请求记录失败: ' + res.status);
+                const data = await res.json();
+                renderAuditRecent(Array.isArray(data.logs) ? data.logs : [], aliases);
+            } catch (e) {
+                container.innerHTML = '';
+                container.appendChild(createElement('p', 'audit-recent-empty', '--'));
             }
         }
 
@@ -2019,9 +2209,9 @@
                 toggle.dataset.panelBound = '1';
                 toggle.onchange = function (e) { setAdguardEnabled(e.target.checked); };
             }
-            await Promise.all([loadAdguardEnabled(), loadTodayStats()]);
+            await Promise.all([loadAdguardEnabled(), loadTodayStats(), loadAuditRecent()]);
         }
-        // --- 广告过滤总开关 / 今日统计 END ---
+        // --- 广告过滤总开关 / 今日统计 / DNS 请求记录摘要 END ---
 
         // --- END OF REVISED LOG RENDERING LOGIC ---
 
@@ -2029,6 +2219,9 @@
             // No need to initialize Mermaid here anymore
             dataModalSearchInput = getById('data-modal-search'); 
 
+            // 首次渲染：按服务端存档排好模块顺序（失败/超时静默降级为默认顺序），拖拽只在有鼠标的环境挂一次
+            loadModuleLayout();
+            setupModuleDragAndDrop();
             setupEventListeners();
             setupCardToggles();
             
@@ -2050,8 +2243,6 @@
             
             initializeTooltips();
 
-            // 初始化时预取覆盖配置（移动版）
-            pLoadOverridesToForm();
         });
     </script>
 </body>
