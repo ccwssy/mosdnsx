@@ -22,6 +22,9 @@ func RegisterAuditAPI(router *chi.Mux) {
 		// ADDED: New routes for capacity management
 		r.Get("/capacity", handleGetAuditCapacity)
 		r.Post("/capacity", handleSetAuditCapacity)
+		// 日志保留策略（保留天数 / 单文件体积上限），前端日志页直接消费。
+		r.Get("/settings", handleGetAuditSettings)
+		r.Post("/settings", handleSetAuditSettings)
 	})
 }
 
@@ -96,4 +99,102 @@ func handleSetAuditCapacity(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Audit log capacity set to %d. Existing logs have been cleared.", req.Capacity)
+}
+
+// auditSettingsResponse 是 /api/v1/audit/settings 的响应体，字段名与前端约定写死。
+type auditSettingsResponse struct {
+	Capacity       int   `json:"capacity"`
+	RetentionDays  int   `json:"retention_days"`
+	FileMaxMB      int64 `json:"file_max_mb"`
+	FileEnabled    bool  `json:"file_enabled"`
+	AuditDirBytes  int64 `json:"audit_dir_bytes"`
+	AuditFileCount int   `json:"audit_file_count"`
+}
+
+// handleGetAuditSettings 返回当前日志保留策略与落盘目录占用。
+func handleGetAuditSettings(w http.ResponseWriter, r *http.Request) {
+	cfg := getAuditFileCfg()
+
+	retentionDays := cfg.RetentionDays
+	if retentionDays <= 0 {
+		retentionDays = defaultAuditRetentionDays
+	}
+	fileMaxMB := cfg.FileMaxMB
+	if fileMaxMB <= 0 {
+		fileMaxMB = defaultAuditFileMaxMB
+	}
+
+	// 目录统计失败时返回 0，不把统计问题升级成 500。
+	dirBytes, fileCount := auditDirStats()
+
+	resp := auditSettingsResponse{
+		Capacity:       GlobalAuditCollector.GetCapacity(),
+		RetentionDays:  retentionDays,
+		FileMaxMB:      fileMaxMB,
+		FileEnabled:    cfg.FileEnabled,
+		AuditDirBytes:  dirBytes,
+		AuditFileCount: fileCount,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		mlog.L().Error("failed to encode audit settings to client", zap.Error(err))
+	}
+}
+
+// handleSetAuditSettings 更新日志保留策略。
+// 两项均可选：字段缺省表示不改；显式给出的值必须在允许区间内，越界（含 0）一律 400。
+func handleSetAuditSettings(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RetentionDays *int   `json:"retention_days"`
+		FileMaxMB     *int64 `json:"file_max_mb"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "请求体格式错误: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.RetentionDays != nil && (*req.RetentionDays < minAuditRetentionDays || *req.RetentionDays > maxAuditRetentionDays) {
+		http.Error(w, fmt.Sprintf("retention_days 超出允许范围（%d-%d 天）", minAuditRetentionDays, maxAuditRetentionDays), http.StatusBadRequest)
+		return
+	}
+	if req.FileMaxMB != nil && (*req.FileMaxMB < minAuditFileMaxMB || *req.FileMaxMB > maxAuditFileMaxMB) {
+		http.Error(w, fmt.Sprintf("file_max_mb 超出允许范围（%d-%d MB）", minAuditFileMaxMB, maxAuditFileMaxMB), http.StatusBadRequest)
+		return
+	}
+
+	cfg := getAuditFileCfg()
+	retentionDays := cfg.RetentionDays
+	if retentionDays <= 0 {
+		retentionDays = defaultAuditRetentionDays
+	}
+	if req.RetentionDays != nil {
+		retentionDays = *req.RetentionDays
+	}
+	fileMaxMB := cfg.FileMaxMB
+	if fileMaxMB <= 0 {
+		fileMaxMB = defaultAuditFileMaxMB
+	}
+	if req.FileMaxMB != nil {
+		fileMaxMB = *req.FileMaxMB
+	}
+
+	if err := applyAuditRetentionSettings(retentionDays, fileMaxMB, MainConfigBaseDir); err != nil {
+		mlog.L().Error("failed to apply audit retention settings", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	dirBytes, fileCount := auditDirStats()
+	resp := auditSettingsResponse{
+		Capacity:       GlobalAuditCollector.GetCapacity(),
+		RetentionDays:  retentionDays,
+		FileMaxMB:      fileMaxMB,
+		FileEnabled:    getAuditFileCfg().FileEnabled,
+		AuditDirBytes:  dirBytes,
+		AuditFileCount: fileCount,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		mlog.L().Error("failed to encode audit settings to client", zap.Error(err))
+	}
 }

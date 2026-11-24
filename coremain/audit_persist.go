@@ -13,8 +13,8 @@ import (
 	"bufio"
 	"container/heap"
 	"encoding/json"
-	"io"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -38,6 +38,9 @@ const (
 	auditFlushEvery = 512
 	// auditFlushInterval 是兜底落盘间隔，保证低流量时日志也能很快出现在文件里。
 	auditFlushInterval = 2 * time.Second
+	// auditPurgeInterval 是过期文件清理的巡检间隔。清理是低频目录扫描，不能挂在
+	// 2s 的 flush tick 上；一小时一次既能让新保留天数免重启生效，又不影响查询路径。
+	auditPurgeInterval = time.Hour
 	// auditTailScanMax 是回填时最多向后扫描的字节数，避免超大文件全量读。
 	auditTailScanMax = 16 << 20
 )
@@ -145,6 +148,10 @@ func (s *AuditFileStore) writer() {
 	ticker := time.NewTicker(auditFlushInterval)
 	defer ticker.Stop()
 
+	// 独立的低频清理 tick：保留天数在运行期可改，靠它免重启生效。
+	purgeTicker := time.NewTicker(auditPurgeInterval)
+	defer purgeTicker.Stop()
+
 	for {
 		select {
 		case batch, ok := <-s.ch:
@@ -158,8 +165,49 @@ func (s *AuditFileStore) writer() {
 			}
 		case <-ticker.C:
 			s.flushBuf()
+		case <-purgeTicker.C:
+			s.purgeExpired()
 		}
 	}
+}
+
+// SetRetention 更新保留天数；<=0 时回落到默认值。对 nil receiver 安全。
+func (s *AuditFileStore) SetRetention(days int) {
+	if s == nil {
+		return
+	}
+	if days <= 0 {
+		days = defaultAuditRetentionDays
+	}
+	s.mu.Lock()
+	s.retention = days
+	s.mu.Unlock()
+}
+
+// RetentionDays 返回当前保留天数；未设置时返回默认值。对 nil receiver 安全。
+func (s *AuditFileStore) RetentionDays() int {
+	if s == nil {
+		return defaultAuditRetentionDays
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.retention <= 0 {
+		return defaultAuditRetentionDays
+	}
+	return s.retention
+}
+
+// SetMaxFileMB 更新单文件体积上限；<=0 时回落到默认值。对 nil receiver 安全。
+func (s *AuditFileStore) SetMaxFileMB(mb int64) {
+	if s == nil {
+		return
+	}
+	if mb <= 0 {
+		mb = defaultAuditFileMaxMB
+	}
+	s.mu.Lock()
+	s.maxBytes = mb << 20
+	s.mu.Unlock()
 }
 
 // appendBuf 把一批日志编码进内存缓冲（不落盘），返回缓冲中的总条目数。
@@ -262,12 +310,24 @@ func (s *AuditFileStore) ensureFileLocked() (string, error) {
 }
 
 // purgeExpired 删除超过保留期的日志文件。
+// 保留天数先在锁内取快照，目录扫描与删除都在锁外做，避免阻塞写盘路径。
 func (s *AuditFileStore) purgeExpired() {
-	entries, err := os.ReadDir(s.dir)
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	dir := s.dir
+	retention := s.retention
+	s.mu.Unlock()
+	if retention <= 0 {
+		retention = defaultAuditRetentionDays
+	}
+
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	cutoff := time.Now().AddDate(0, 0, -s.retention)
+	cutoff := time.Now().AddDate(0, 0, -retention)
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasPrefix(name, auditLogFilePrefix) || !strings.HasSuffix(name, auditLogFileSuffix) {
@@ -278,7 +338,7 @@ func (s *AuditFileStore) purgeExpired() {
 			continue
 		}
 		if info.ModTime().Before(cutoff) {
-			_ = os.Remove(filepath.Join(s.dir, name))
+			_ = os.Remove(filepath.Join(dir, name))
 		}
 	}
 }

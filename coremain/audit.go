@@ -4,6 +4,8 @@ import (
 	"container/heap"
 	"container/list"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"net"
 	"net/netip"
@@ -127,6 +129,11 @@ const (
 	slowestQueriesCapacity = 300
 	auditChannelCapacity   = 10240
 	auditSettingsFilename  = "audit_settings.json"
+	// 日志保留策略的允许区间，超出即拒绝（前端也按同一区间做提示）。
+	minAuditRetentionDays = 1
+	maxAuditRetentionDays = 90
+	minAuditFileMaxMB     = 8
+	maxAuditFileMaxMB     = 512
 )
 
 type AuditSettings struct {
@@ -202,13 +209,88 @@ var auditFakeIPNets []netip.Prefix
 // auditSettingsPath 记录配置文件路径，供后续保存设置时复用。
 var auditSettingsPath string
 
+// auditDir 记录落盘实际使用的目录（InitializeAuditCollector 计算），供面板统计体积。
+var auditDir string
+
 // auditFileCfg 保存当前生效的落盘配置，避免保存容量时丢失这些字段。
-var auditFileCfg AuditSettings
+// auditFileCfgMu 保护下面两个包级变量：HTTP 处理器与容量设置可能并发读写。
+var (
+	auditFileCfgMu sync.Mutex
+	auditFileCfg   AuditSettings
+)
+
+// getAuditFileCfg 返回当前生效的落盘配置快照。
+func getAuditFileCfg() AuditSettings {
+	auditFileCfgMu.Lock()
+	defer auditFileCfgMu.Unlock()
+	return auditFileCfg
+}
+
+// setAuditFileCfg 覆盖包级落盘配置快照。
+func setAuditFileCfg(cfg AuditSettings) {
+	auditFileCfgMu.Lock()
+	auditFileCfg = cfg
+	auditFileCfgMu.Unlock()
+}
+
+// setAuditSettingsPath 记录配置文件路径。
+func setAuditSettingsPath(path string) {
+	auditFileCfgMu.Lock()
+	auditSettingsPath = path
+	auditFileCfgMu.Unlock()
+}
+
+// getAuditSettingsPath 返回配置文件路径快照。
+func getAuditSettingsPath() string {
+	auditFileCfgMu.Lock()
+	defer auditFileCfgMu.Unlock()
+	return auditSettingsPath
+}
+
+// setAuditDir 记录落盘目录，供面板统计使用。
+func setAuditDir(dir string) {
+	auditFileCfgMu.Lock()
+	auditDir = dir
+	auditFileCfgMu.Unlock()
+}
+
+// getAuditDir 返回落盘目录快照。
+func getAuditDir() string {
+	auditFileCfgMu.Lock()
+	defer auditFileCfgMu.Unlock()
+	return auditDir
+}
+
+// auditDirStats 统计落盘目录的体积与文件数；未启用落盘或读取失败时返回 0，绝不报错。
+func auditDirStats() (int64, int) {
+	dir := getAuditDir()
+	if dir == "" {
+		return 0, 0
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0
+	}
+	var total int64
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		total += info.Size()
+		count++
+	}
+	return total, count
+}
 
 func InitializeAuditCollector(configBaseDir string) {
 	initialCapacity := defaultAuditCapacity
 	settingsPath := filepath.Join(configBaseDir, auditSettingsFilename)
-	auditSettingsPath = settingsPath
+	setAuditSettingsPath(settingsPath)
 	settings := &AuditSettings{}
 	data, err := os.ReadFile(settingsPath)
 
@@ -225,22 +307,24 @@ func InitializeAuditCollector(configBaseDir string) {
 		}
 	}
 
-	auditFileCfg = *settings
+	setAuditFileCfg(*settings)
 
 	if initialCapacity != defaultAuditCapacity {
 		GlobalAuditCollector = NewAuditCollector(initialCapacity)
 	}
 
+	// 落盘目录与 FileEnabled 无关：面板要统计占用，未开启落盘时也要给出实际路径。
+	dir := settings.FileDir
+	if dir == "" {
+		dir = filepath.Join(configBaseDir, "audit")
+	} else if !filepath.IsAbs(dir) {
+		dir = filepath.Join(configBaseDir, dir)
+	}
+	dir = filepath.Clean(dir)
+	setAuditDir(dir)
+
 	// 查询日志落盘：先回填历史，再启动写入。
 	if settings.FileEnabled {
-		dir := settings.FileDir
-		if dir == "" {
-			dir = filepath.Join(configBaseDir, "audit")
-		} else if !filepath.IsAbs(dir) {
-			dir = filepath.Join(configBaseDir, dir)
-		}
-		dir = filepath.Clean(dir)
-
 		// fake-ip 网段：留空用默认 198.18.0.0/15（RFC 2544，OpenClash 默认池）。
 		cidrs := settings.FakeIPCidrs
 		if len(cidrs) == 0 {
@@ -694,7 +778,9 @@ func (c *AuditCollector) SetCapacity(newCapacity int, configBaseDir string) {
 		newCapacity = maxAuditCapacity
 	}
 
-	c.saveSettings(newCapacity, configBaseDir)
+	// 保存容量时沿用当前生效的保留策略，避免把落盘相关字段写丢。
+	cfg := getAuditFileCfg()
+	c.saveSettings(newCapacity, cfg.RetentionDays, cfg.FileMaxMB, configBaseDir)
 
 	c.capacity.Store(int64(newCapacity))
 	c.logs = make([]AuditLog, 0, newCapacity)
@@ -707,10 +793,12 @@ func (c *AuditCollector) SetCapacity(newCapacity int, configBaseDir string) {
 	c.totalQueryDuration = 0.0
 }
 
-func (c *AuditCollector) saveSettings(capacityToSave int, configBaseDir string) {
-	settings := auditFileCfg
+func (c *AuditCollector) saveSettings(capacityToSave int, retentionDays int, fileMaxMB int64, configBaseDir string) {
+	settings := getAuditFileCfg()
 	settings.Capacity = capacityToSave
-	auditFileCfg = settings
+	settings.RetentionDays = retentionDays
+	settings.FileMaxMB = fileMaxMB
+	setAuditFileCfg(settings)
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		mlog.L().Error("failed to marshal audit settings", zap.Error(err))
@@ -722,6 +810,52 @@ func (c *AuditCollector) saveSettings(capacityToSave int, configBaseDir string) 
 	} else {
 		mlog.L().Info("successfully saved audit settings", zap.String("path", settingsPath), zap.Int("capacity", capacityToSave))
 	}
+}
+
+// applyAuditRetentionSettings 应用日志保留策略：更新内存配置 → 落盘 audit_settings.json →
+// 同步到两个落盘器。过期清理交给落盘器的低频清理 tick，保存动作本身不触发全量重扫。
+func applyAuditRetentionSettings(retentionDays int, fileMaxMB int64, configBaseDir string) error {
+	if retentionDays <= 0 {
+		retentionDays = defaultAuditRetentionDays
+	}
+	if fileMaxMB <= 0 {
+		fileMaxMB = defaultAuditFileMaxMB
+	}
+
+	cfg := getAuditFileCfg()
+	cfg.RetentionDays = retentionDays
+	cfg.FileMaxMB = fileMaxMB
+	setAuditFileCfg(cfg)
+
+	settingsPath := ""
+	if configBaseDir != "" {
+		settingsPath = filepath.Join(configBaseDir, auditSettingsFilename)
+	} else {
+		settingsPath = getAuditSettingsPath()
+	}
+	if settingsPath == "" {
+		return errors.New("审计设置文件路径未初始化，无法保存保留策略")
+	}
+	setAuditSettingsPath(settingsPath)
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化审计设置失败: %w", err)
+	}
+	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+		return fmt.Errorf("写入审计设置文件失败: %w", err)
+	}
+
+	GlobalAuditFileStore.SetRetention(retentionDays)
+	GlobalAuditFileStore.SetMaxFileMB(fileMaxMB)
+	GlobalAuditFakeIPStore.SetRetention(retentionDays)
+	GlobalAuditFakeIPStore.SetMaxFileMB(fileMaxMB)
+
+	mlog.L().Info("audit retention settings applied",
+		zap.String("path", settingsPath),
+		zap.Int("retention_days", retentionDays),
+		zap.Int64("file_max_mb", fileMaxMB))
+	return nil
 }
 
 type V2GetLogsParams struct {
