@@ -30,7 +30,10 @@
         }
         
         html { 
-            font-size: 10.75px; scroll-behavior: smooth; box-sizing: border-box; 
+            /* 根字号响应式：小屏保底 14px，随视口线性放大到大屏 20px；原硬编码 10.75px 在大屏过小 */
+            font-size: clamp(14px, 0.6vw + 8px, 20px);
+            scroll-behavior: smooth; 
+            box-sizing: border-box; 
         }
         *, *::before, *::after {
             box-sizing: inherit;
@@ -85,9 +88,12 @@
         .module-grid > [data-module] > .control-section-body { overflow-y: visible; padding: 0; }
         .module-grid > [data-module]:has(> .control-section-header) { padding: 0; }
         .module-grid > [data-module]:has(> .control-section-header) > .control-section-body { padding: 0 1.2rem 1.2rem 1.2rem; }
-        .module-grid > [data-module][draggable="true"] { cursor: grab; }
-        .module-grid > [data-module].dragging { opacity: 0.45; }
-        .module-grid > [data-module].drag-over { outline: 2px dashed var(--accent-color); outline-offset: 2px; }
+        /* 拖拽视觉态由 SortableJS 的类名驱动（不再用原生 draggable 属性） */
+        .module-grid > [data-module] { cursor: grab; }
+        .module-grid > [data-module="cache-group"] { cursor: default; }
+        .module-ghost { opacity: 0.4; }
+        .module-chosen { cursor: grabbing; }
+        .module-drag { opacity: 0.9; }
         /* DNS 请求记录摘要：最近 8 条 */
         .audit-recent-list { display: flex; flex-direction: column; }
         .audit-recent-item { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, auto) auto; align-items: center; gap: 0.6rem; font-size: 0.9rem; padding: 0.45rem 0; border-bottom: 1px solid var(--border-color); }
@@ -106,6 +112,13 @@
         .section-title { font-size: 1.1rem; font-weight: 600; color: var(--text-color); margin: 0 0 1rem 0; padding-bottom: 0.7rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 0.7rem; flex-shrink: 0; }
         .section-title .fas, .section-title .fa-solid, .section-title .fa-brands { color: var(--accent-color); font-size: 1.1em; opacity: 0.9; }
         .control-section-body > *:not(.subsection-title) + *:not(.subsection-title) { margin-top: 1rem; }
+        /* 界面密度：与日志页共用 localStorage 键 mosdns-layout；字号统一交给根字号 clamp，
+           紧凑态只收紧内边距与间距，不再用 font-size 缩放（否则与 clamp 叠加，大屏又变回小字） */
+        html[data-layout="compact"] .control-section { padding: 0.9rem; }
+        html[data-layout="compact"] .main-container,
+        html[data-layout="compact"] .module-grid { gap: 0.8rem; }
+        html[data-layout="compact"] .audit-recent-item { padding: 0.3rem 0.5rem; }
+        html[data-layout="compact"] .subsection-title { margin-bottom: 0.3rem; }
         
         /* MODIFICATION START: Styles for the combined control bar */
         .refresh-action-bar { 
@@ -792,11 +805,6 @@
                 <!-- MODIFICATION START: Combined control bar and style alignment -->
                 <div class="refresh-action-bar">
                     <div class="control-group">
-                        <label for="auto-refresh-toggle" class="auto-refresh-control">
-                            <span class="switch-label-text">自动刷新</span>
-                            <input type="checkbox" id="auto-refresh-toggle" class="generic-switch-input">
-                            <span class="generic-switch-slider"></span>
-                        </label>
                         <button id="refresh-now-btn" class="btn" aria-label="立即刷新数据"><i class="fas fa-sync-alt"></i> 立即刷新</button>
                     </div>
 
@@ -847,16 +855,16 @@
                 </div>
             </div>
         </section>
-        <!-- 广告过滤总开关：紧贴系统信息区，状态一律以 /plugins/adguard/enabled 的服务端返回为准 -->
-        <section class="control-section" data-module="adguard-filter" style="flex-grow: 0; padding: 1.2rem;">
-            <h4 class="section-title"><i class="fas fa-shield-alt"></i> 广告过滤</h4>
-            <div class="control-group" style="align-items: center; gap: .8rem; flex-wrap: wrap;">
-                <label for="adguard-enabled-toggle" class="auto-refresh-control">
-                    <span class="switch-label-text" id="adguard-state-text">广告过滤: 读取中…</span>
-                    <input type="checkbox" id="adguard-enabled-toggle" class="generic-switch-input">
-                    <span class="generic-switch-slider"></span>
-                </label>
-                <span class="hint" style="color: var(--label-color);">切换后回读服务端状态</span>
+        <!-- 功能开关：运行开关（/api/v1/switches）+ 功能与显示（审计启停 / 更新自动检查 / 界面密度 / 图表模式） -->
+        <section class="control-section" data-module="feature-switches">
+            <h4 class="section-title"><i class="fas fa-toggle-on"></i> 功能开关</h4>
+            <h5 class="subsection-title">DNS 开关</h5>
+            <div id="feature-switches-runtime">
+                <p class="hint" style="color: var(--label-color);">读取中…</p>
+            </div>
+            <h5 class="subsection-title">功能与显示</h5>
+            <div id="feature-switches-feature">
+                <p class="hint" style="color: var(--label-color);">读取中…</p>
             </div>
         </section>
         <!-- DNS 请求记录摘要：吸收原「今日统计」卡（metrics-today-stats 原样搬入），数据源 /api/v2/audit/stats + /api/v2/audit/logs -->
@@ -961,6 +969,8 @@
         </div>
     </div>
     
+    <!-- 拖动排序：本地引用的 SortableJS（断网/内网可用，禁止改 CDN），必须在内联脚本之前就绪 -->
+    <script src="assets/js/sortable.min.js"></script>
     <script>
         // --- MODIFICATION START ---
         // I have reviewed and refactored the entire script block for clarity, 
@@ -1022,6 +1032,12 @@
 
         function createElement(tag, className, innerText = '', id = '') { const el = D.createElement(tag); if (className) el.className = className; if (innerText) el.innerText = innerText; if (id) el.id = id; return el; }
         function formatNumber(num) { if (typeof num !== 'number' && isNaN(num = parseFloat(num))) { return num; } return num.toLocaleString('en-US'); }
+
+        // 首页不加载 log.js，开关的 tag/value/desc 都不可信，插入 innerHTML 前一律转义
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g,
+                c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
 
         function showToast(message, type = 'success', duration = 3500) {
             const container = getById('toast-container');
@@ -1185,7 +1201,7 @@
         async function refreshData(forceRebuild = false, updateCharts = false) {
             await updateCoreModeStatus();
             const data = await fetchData();
-            if (data && data.error) { getById('main-content').innerHTML = `<div class="error-message"><i class="fas fa-exclamation-triangle"></i><p>无法连接到 MosDNS API。</p><small>${data.error}</small></div>`; if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; getById('auto-refresh-toggle').checked = false; localStorage.setItem('autoRefresh', 'false'); } return; }
+            if (data && data.error) { getById('main-content').innerHTML = `<div class="error-message"><i class="fas fa-exclamation-triangle"></i><p>无法连接到 MosDNS API。</p><small>${data.error}</small></div>`; if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; } return; }
             if (!data) return;
             await ensureChartsLoaded();
             if (forceRebuild) { getById('main-content').innerHTML = ''; Object.values(chartInstances).forEach(c => c.destroy()); chartInstances = {}; }
@@ -1234,7 +1250,9 @@
         }
         
         function setupCardToggles() { 
+            // 容器在「外观设置」页签内（#card-toggles），缺失时直接返回（函数与调用点保留）
             const container = getById('card-toggles');
+            if (!container) return;
             container.innerHTML = ''; 
             activeCacheOrder.forEach(tag => { 
                 const toggleId = `card-toggle-${tag}`;
@@ -1263,7 +1281,10 @@
         }
         
         function updateThemeButtons(activeMode) {
-            const ts = getById('theme-selector'); ts.innerHTML = '';
+            // 主题按钮 UI 挂在「外观设置」页签的 #theme-selector；容器缺失时直接返回
+            const ts = getById('theme-selector');
+            if (!ts) return;
+            ts.innerHTML = '';
             Object.keys(themeMap).forEach(mode => {
                 const t = themeMap[mode]; const btn = createElement('button', 'control-base-label');
                 btn.dataset.theme = mode; btn.innerHTML = `<i class="${t.icon}"></i> ${t.name}`;
@@ -1272,6 +1293,329 @@
             });
         }
         
+
+        // --- 功能开关模块（data-module="feature-switches"）---
+        // 后端 values 对四个开关一律返回 ["A","B"]，真实语义值另存映射表；不在表内的 tag 回落到接口自带 values/desc
+        // form: 'slider' = 布尔开关走开关滑块；'segmented' = 枚举选择走分段按钮组（§4.4 决策表）
+        const FEATURE_SWITCH_META = {
+            adguard_switch: {
+                title: '广告过滤',
+                form: 'slider',
+                tooltip: '规则链总闸。关闭时跳过广告过滤与 SRS 兜底，直奔 main_sequence，用于排查误杀。',
+                options: [{ value: 'on', label: '开启' }, { value: 'off', label: '关闭' }]
+            },
+            fallback_switch: {
+                title: '应急熔断',
+                form: 'slider',
+                tooltip: '开启后全部查询直奔 fallback，跳过分流判断；关闭即恢复正常分流。',
+                options: [{ value: 'off', label: '正常' }, { value: 'on', label: '熔断' }]
+            },
+            mode_switch: {
+                title: '分流策略',
+                form: 'segmented',
+                tooltip: 'A 智能分流（GFW 名单走国外）· B 国内优先（先试国内再 fallback）。',
+                options: [{ value: 'A', label: 'A 智能' }, { value: 'B', label: 'B 国内优先' }]
+            },
+            ipv6_switch: {
+                title: '国外域名 IPv6',
+                form: 'slider',
+                tooltip: '开启时屏蔽国外域名的 AAAA 查询；关闭则放行，允许国外域名返回 IPv6。',
+                options: [{ value: 'on', label: '屏蔽' }, { value: 'off', label: '放行' }]
+            }
+        };
+
+        // 布尔开关的三态语义压成二态时必须写死映射，别让用户猜
+        // 应急熔断：off=正常，on=熔断；国外域名 IPv6：on=屏蔽，off=放行
+        const SWITCH_SLIDER_MAP = {
+            adguard_switch:  { onValue: 'on', offValue: 'off', onLabel: '总闸: 开', offLabel: '总闸: 关' },
+            fallback_switch: { onValue: 'on', offValue: 'off', onLabel: '熔断', offLabel: '正常' },
+            ipv6_switch:     { onValue: 'on', offValue: 'off', onLabel: '屏蔽', offLabel: '放行' }
+        };
+
+        // 已由双控件行手写渲染、不能再走通用循环的 tag（adguard_switch 是主滑块，不是隐藏项）
+        const INLINE_SWITCH_TAGS = ['adguard_switch'];
+
+        // 界面密度 / 图表模式的消费方是日志页，首页只读写 localStorage 并高亮当前值
+        const FEATURE_LAYOUT_OPTIONS = [{ value: 'comfortable', label: '舒适' }, { value: 'compact', label: '紧凑' }];
+        const FEATURE_CHART_MODE_OPTIONS = [{ value: 'integrated', label: '合并显示' }, { value: 'independent', label: '独立图表' }];
+        const UPDATE_AUTO_DEFAULT = { enabled: true, interval: 1440 };
+
+        let featureSwitchItems = [];
+        let featureSwitchFailed = false;
+        let featureSwitchLoaded = false;
+        let auditCapturing = null;
+        // 插件层广告过滤开关的服务端状态缓存：null = 尚未读到。重渲染时用它复原副滑块的勾选与文案，
+        // 否则任何一次 renderFeatureSwitches() 都会把副开关视觉上打回未勾选
+        let adguardEnabledState = null;
+
+        function loadUpdateAutoConfig() {
+            try {
+                const raw = localStorage.getItem('mosdns-update-auto');
+                if (!raw) throw new Error('empty');
+                const parsed = JSON.parse(raw);
+                return {
+                    enabled: Boolean(parsed.enabled),
+                    interval: Number.isFinite(parsed.interval) ? parsed.interval : UPDATE_AUTO_DEFAULT.interval
+                };
+            } catch (e) {
+                return { enabled: UPDATE_AUTO_DEFAULT.enabled, interval: UPDATE_AUTO_DEFAULT.interval };
+            }
+        }
+
+        function saveUpdateAutoConfig(cfg) {
+            try { localStorage.setItem('mosdns-update-auto', JSON.stringify({ enabled: Boolean(cfg.enabled), interval: cfg.interval })); }
+            catch (e) { showToast('更新自动检查设置保存失败', 'error'); }
+        }
+
+        // 分段按钮组（枚举选择）：一排等宽按钮，active 高亮复用 .control-base-label + .active
+        function segmentedGroup(buttons) {
+            return '<div class="control-group" style="gap: .4rem; flex-wrap: wrap;">' + buttons + '</div>';
+        }
+
+        function segmentedButton(attrAction, action, attrValue, value, active, label) {
+            return '<button type="button" class="control-base-label' + (active ? ' active' : '') +
+                '" style="flex: 1 1 auto; justify-content: center; padding: 0.45rem 0.7rem; font-size: 0.85rem; white-space: nowrap;"' +
+                ' ' + attrAction + '="' + escapeHtml(action) + '" ' + attrValue + '="' + escapeHtml(value) + '">' +
+                escapeHtml(label) + '</button>';
+        }
+
+        // 枚举选择：功能/显示项（界面密度 / 图表模式）
+        function featureOptionButtons(action, options, current) {
+            return segmentedGroup(options.map(opt => segmentedButton('data-feature-action', action,
+                'data-feature-value', String(opt.value), String(opt.value) === String(current), opt.label)).join(''));
+        }
+
+        // 枚举选择：运行开关（分流策略这类 2~4 个互斥值），值写回 /api/v1/switches/<tag>
+        function switchOptionButtons(tag, options, current) {
+            return segmentedGroup(options.map(opt => segmentedButton('data-switch-tag', tag,
+                'data-switch-value', String(opt.value), String(opt.value) === String(current), opt.label)).join(''));
+        }
+
+        // 布尔开关 -> 开关滑块：控件本体 + 旁侧 switch-label-text 显示当前语义（这是形态的一部分）
+        function switchSlider(tag, current, map) {
+            // 读不到值（接口失败 / 状态文件不可读）时不假装是「关」，直接标未知
+            const known = String(current) !== '';
+            const on = known && String(current) === String(map.onValue);
+            const text = known ? (on ? map.onLabel : map.offLabel) : '未知';
+            return '<label class="auto-refresh-control" style="gap: .5rem;">' +
+                '<span class="switch-label-text" style="font-size: .85rem; color: ' + (on ? 'var(--status-green)' : 'var(--label-color)') + ';">' + escapeHtml(text) + '</span>' +
+                '<input type="checkbox" class="generic-switch-input" data-slider-tag="' + escapeHtml(tag) + '" data-slider-on="' + escapeHtml(map.onValue) + '" data-slider-off="' + escapeHtml(map.offValue) + '"' + (on ? ' checked' : '') + '>' +
+                '<span class="generic-switch-slider"></span>' +
+                '</label>';
+        }
+
+        // 行内只保留「标题 + ⓘ + 控件」：解释文字进 data-tooltip（靠既有全局委托弹提示），不再铺行内、不再写「当前值」
+        function featureRow(title, tooltip, control) {
+            const tip = tooltip
+                ? '<i class="fas fa-info-circle info-tooltip-icon" data-tooltip="' + escapeHtml(tooltip) + '"></i>'
+                : '';
+            return '<div class="control-group" style="align-items: center; gap: .5rem; flex-wrap: nowrap; margin-bottom: .6rem;">' +
+                '<strong style="color: var(--text-color); font-size: .95rem; white-space: nowrap;">' + escapeHtml(title) + '</strong>' +
+                tip +
+                '<div class="control-group" style="gap: .5rem; margin-left: auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end;">' + control + '</div>' +
+                '</div>';
+        }
+
+        function switchItemValue(tag) {
+            const item = featureSwitchItems.find(it => String(it.tag || it.name || '') === tag);
+            return item ? String(item.value == null ? '' : item.value) : '';
+        }
+
+        // 广告过滤双控件行：主滑块 = 规则链总闸（/api/v1/switches/adguard_switch），副滑块 = 插件层（/plugins/adguard/enabled）
+        // 副滑块的 #adguard-enabled-toggle / #adguard-state-text 两个 id 被既有 loadAdguardEnabled / setAdguardEnabled 依赖，必须保留
+        function adguardSwitchRow() {
+            const mainControl = switchSlider('adguard_switch', switchItemValue('adguard_switch'), SWITCH_SLIDER_MAP.adguard_switch);
+            const pluginKnown = typeof adguardEnabledState === 'boolean';
+            const pluginControl = '<label for="adguard-enabled-toggle" class="auto-refresh-control" style="gap: .5rem;">' +
+                '<span class="switch-label-text" id="adguard-state-text" style="font-size: .85rem; color: ' +
+                (pluginKnown ? (adguardEnabledState ? 'var(--status-green)' : 'var(--label-color)') : 'var(--label-color)') + ';">' +
+                (pluginKnown ? '插件层: ' + (adguardEnabledState ? '开' : '关') : '插件层: 读取中…') + '</span>' +
+                '<span style="display: inline-flex; align-items: center; transform: scale(0.85); transform-origin: center;">' +
+                '<input type="checkbox" id="adguard-enabled-toggle" class="generic-switch-input"' + (pluginKnown && adguardEnabledState ? ' checked' : '') + '>' +
+                '<span class="generic-switch-slider"></span>' +
+                '</span>' +
+                '</label>';
+            return featureRow('广告过滤', FEATURE_SWITCH_META.adguard_switch.tooltip, mainControl + pluginControl);
+        }
+
+        function renderFeatureSwitchRuntime() {
+            const box = getById('feature-switches-runtime');
+            if (!box) return;
+            // 广告过滤双控件行永远先渲染：API 失败时它也必须存在，否则 loadAdguardEnabled() 判空早退，整条广告过滤链路静默失效
+            const rows = [adguardSwitchRow()];
+            featureSwitchItems.forEach(it => {
+                const tag = String(it.tag || it.name || '');
+                if (!tag || INLINE_SWITCH_TAGS.indexOf(tag) !== -1) return;
+                const current = String(it.value == null ? '' : it.value);
+                const meta = FEATURE_SWITCH_META[tag];
+                const title = meta ? meta.title : (it.name || tag);
+                const tooltip = meta ? meta.tooltip : (it.desc || '');
+                let control;
+                if (!meta) {
+                    // 未知 tag 保留原有通用渲染（分段按钮组），不因未登记而崩或消失
+                    const values = Array.isArray(it.values) ? it.values.map(v => ({ value: String(v), label: String(v) })) : [];
+                    control = values.length ? switchOptionButtons(tag, values, current) : '<span class="switch-label-text" style="font-size: .85rem; color: var(--label-color);">' + escapeHtml(current) + '</span>';
+                } else if (meta.form === 'segmented' || !SWITCH_SLIDER_MAP[tag]) {
+                    // 枚举选择；或登记了滑块却没写映射时退回分段按钮组，绝不因缺映射抛错
+                    control = switchOptionButtons(tag, meta.options, current);
+                } else {
+                    control = switchSlider(tag, current, SWITCH_SLIDER_MAP[tag]);
+                }
+                rows.push(featureRow(title, tooltip, control));
+            });
+            // 读取失败 / 未配置 / 读取中的提示追加在广告过滤行之后，不替代它
+            const message = featureSwitchItems.length ? ''
+                : (featureSwitchFailed ? '运行开关读取失败，稍后重试。'
+                    : (featureSwitchLoaded ? '未配置 switch 插件，请在 config-prod.yaml 的 plugins 里添加 type: switchN。' : '读取中…'));
+            box.innerHTML = rows.join('') +
+                (message ? '<p class="hint" style="color: var(--label-color); margin: 0;">' + message + '</p>' : '');
+        }
+
+        function renderFeatureSwitchFeature() {
+            const box = getById('feature-switches-feature');
+            if (!box) return;
+            const knownAudit = typeof auditCapturing === 'boolean';
+            const auditCapturingNow = knownAudit && auditCapturing;
+            // 动作触发：单按钮只写动作（开始捕获 / 停止捕获），状态交给按钮旁的状态点
+            const auditControl = '<span style="width: .6rem; height: .6rem; border-radius: 50%; flex-shrink: 0; background-color: ' +
+                (knownAudit ? (auditCapturingNow ? 'var(--status-green)' : 'var(--status-yellow)') : 'var(--label-color)') + ';"></span>' +
+                '<button type="button" class="btn" data-feature-action="audit" aria-label="' + (knownAudit ? (auditCapturingNow ? '停止审计日志捕获' : '开始审计日志捕获') : '查询审计日志捕获状态') + '"' +
+                ' style="background-color: var(--control-bg); color: var(--control-text); border: 1px solid var(--control-border); padding: 0.6rem 1.2rem; font-size: 0.95rem; font-weight: 500; border-radius: var(--radius-control); cursor: pointer; display: inline-flex; align-items: center; gap: .5rem; box-sizing: border-box;">' +
+                (knownAudit ? (auditCapturingNow ? '停止捕获' : '开始捕获') : '读取中…') + '</button>';
+            const autoCfg = loadUpdateAutoConfig();
+            const layout = localStorage.getItem('mosdns-layout') === 'compact' ? 'compact' : 'comfortable';
+            const chartMode = localStorage.getItem('mosdns-chart-mode') === 'independent' ? 'independent' : 'integrated';
+            box.innerHTML = [
+                featureRow('审计日志捕获', '捕获期间查询日志记录全部请求，关闭后不再记录新请求。',
+                    auditControl),
+                featureRow('更新自动检查', '每 ' + autoCfg.interval + ' 分钟检查一次更新，间隔在日志页「版本与更新」里调整。',
+                    '<label class="auto-refresh-control" style="gap: .5rem;">' +
+                    '<span class="switch-label-text" style="font-size: .85rem; color: ' + (autoCfg.enabled ? 'var(--status-green)' : 'var(--label-color)') + ';">' + (autoCfg.enabled ? '开启' : '关闭') + '</span>' +
+                    '<input type="checkbox" class="generic-switch-input" data-feature-action="update-auto"' +
+                    (autoCfg.enabled ? ' checked' : '') + '><span class="generic-switch-slider"></span></label>'),
+                featureRow('界面密度', '紧凑模式压缩首页与日志页的内边距和间距。', featureOptionButtons('layout', FEATURE_LAYOUT_OPTIONS, layout)),
+                featureRow('图表模式', '独立模式把日志页趋势图从概览卡片里拆出来。', featureOptionButtons('chart-mode', FEATURE_CHART_MODE_OPTIONS, chartMode))
+            ].join('');
+        }
+
+        function renderFeatureSwitches() {
+            renderFeatureSwitchRuntime();
+            renderFeatureSwitchFeature();
+            // innerHTML 重建后新建的 ⓘ 图标没有任何 hover 监听（initializeTooltips 只绑定当次已存在的节点），必须重新绑定
+            initializeTooltips();
+        }
+
+        // 读：GET /api/v1/switches + GET /api/v1/audit/status；写后也走这里整体重读，不做本地乐观更新
+        async function loadFeatureSwitches() {
+            if (!getById('feature-switches-runtime') && !getById('feature-switches-feature')) return;
+            try {
+                const res = await fetch('/api/v1/switches');
+                if (!res.ok) throw new Error('读取运行开关失败: ' + res.status);
+                const data = await res.json();
+                featureSwitchItems = data && Array.isArray(data.switches) ? data.switches : [];
+                featureSwitchFailed = false;
+                featureSwitchLoaded = true;
+            } catch (e) {
+                featureSwitchFailed = true;
+            }
+            try {
+                const res = await fetch('/api/v1/audit/status');
+                if (res.ok) {
+                    const status = await res.json();
+                    auditCapturing = Boolean(status && status.capturing);
+                } else if (typeof auditCapturing !== 'boolean') {
+                    auditCapturing = null;
+                }
+            } catch (e) {
+                if (typeof auditCapturing !== 'boolean') auditCapturing = null;
+            }
+            renderFeatureSwitches();
+        }
+
+        async function setFeatureSwitchValue(tag, value) {
+            if (!tag) return;
+            try {
+                const res = await fetch('/api/v1/switches/' + encodeURIComponent(tag), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: value })
+                });
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(errorText || ('请求失败，状态码: ' + res.status));
+                }
+                showToast('已切换 ' + escapeHtml(tag) + ' → ' + escapeHtml(value));
+            } catch (e) {
+                showToast('切换失败: ' + escapeHtml(e.message), 'error');
+            }
+            await loadFeatureSwitches();
+        }
+
+        async function toggleAuditCapture() {
+            if (typeof auditCapturing !== 'boolean') { await loadFeatureSwitches(); return; }
+            const path = auditCapturing ? '/api/v1/audit/stop' : '/api/v1/audit/start';
+            try {
+                const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                if (!res.ok) throw new Error('请求失败，状态码: ' + res.status);
+                showToast(auditCapturing ? '审计日志捕获已停止' : '审计日志捕获已开启');
+            } catch (e) {
+                showToast('审计开关切换失败: ' + escapeHtml(e.message), 'error');
+            }
+            await loadFeatureSwitches();
+        }
+
+        // 界面密度：首页与日志页共用 localStorage 键 mosdns-layout，首页自己把它落到 html[data-layout] 上
+        function applyLayoutDensity() {
+            const layout = localStorage.getItem('mosdns-layout') === 'compact' ? 'compact' : 'comfortable';
+            document.documentElement.setAttribute('data-layout', layout);
+            return layout;
+        }
+
+        function setFeatureLayout(value) {
+            const next = value === 'compact' ? 'compact' : 'comfortable';
+            try { localStorage.setItem('mosdns-layout', next); } catch (e) { }
+            // 立即在同一标签页生效，不等刷新
+            applyLayoutDensity();
+            renderFeatureSwitches();
+            showToast('界面密度已切换为' + (next === 'compact' ? '紧凑' : '舒适') + '（首页与日志页生效）');
+        }
+
+        function setFeatureChartMode(value) {
+            const next = value === 'independent' ? 'independent' : 'integrated';
+            try { localStorage.setItem('mosdns-chart-mode', next); } catch (e) { }
+            renderFeatureSwitches();
+            showToast('图表模式已切换为' + (next === 'independent' ? '独立图表' : '合并显示') + '（日志页生效）');
+        }
+
+        function setFeatureUpdateAuto(enabled) {
+            const cfg = loadUpdateAutoConfig();
+            cfg.enabled = Boolean(enabled);
+            saveUpdateAutoConfig(cfg);
+            renderFeatureSwitches();
+            showToast('更新自动检查已' + (cfg.enabled ? '开启' : '关闭'));
+        }
+
+        // 毛玻璃开关与强度滑块共用一份当前状态：开关切换后滑块闭包里的旧值必须失效
+        let blurOnState = localStorage.getItem('blurEnabled') !== 'false';
+
+        function blurStrengthValue() {
+            const stored = parseInt(localStorage.getItem('blurStrength'), 10);
+            return Number.isFinite(stored) ? stored : 12;
+        }
+
+        function applyBlurState() {
+            const strength = blurStrengthValue();
+            const slider = getById('blur-slider');
+            if (slider) { slider.value = strength; slider.disabled = !blurOnState; }
+            D.documentElement.style.setProperty('--glass-blur-strength', (blurOnState ? strength : 0) + 'px');
+        }
+
+        function setBlurEnabled(enabled) {
+            blurOnState = Boolean(enabled);
+            try { localStorage.setItem('blurEnabled', blurOnState ? 'true' : 'false'); } catch (e) { }
+            applyBlurState();
+        }
+
         function throttle(func, limit) { let inThrottle; return function() { const args = arguments; const context = this; if (!inThrottle) { func.apply(context, args); inThrottle = true; setTimeout(() => inThrottle = false, limit); } } }
 
         function showErrorModal(message) {
@@ -1643,7 +1987,7 @@
 
         // --- 模块布局（顺序存服务端 panel_layout.json，前端不写 localStorage）---
         // 默认顺序即契约冻结的首页模块标识清单，非 tag 枚举
-        const DEFAULT_MODULE_LAYOUT = ['cache-group', 'control-center', 'adguard-filter', 'audit-summary', 'system-info'];
+        const DEFAULT_MODULE_LAYOUT = ['cache-group', 'control-center', 'feature-switches', 'audit-summary', 'system-info'];
         const MODULE_LAYOUT_TIMEOUT = 3000;
         let moduleLayout = DEFAULT_MODULE_LAYOUT.slice();
         let moduleLayoutSaveTimer = null;
@@ -1667,9 +2011,14 @@
             const grid = getById('module-grid');
             if (!grid) return;
             moduleLayout = normalizeModuleLayout(order);
-            moduleLayout.forEach((id, index) => {
+            // SortableJS 直接搬 DOM 节点、并按元素的真实位置判落点：这里把 DOM 顺序对齐到 moduleLayout
+            // 并清掉内联 order，否则"CSS order 显示的顺序"与"DOM 顺序"会各说各话，拖动落点跟着错位。
+            moduleLayout.forEach((id) => {
                 const node = grid.querySelector('[data-module="' + id + '"]');
-                if (node) node.style.order = String(index);
+                if (node) {
+                    node.style.order = '';
+                    grid.appendChild(node);
+                }
             });
         }
 
@@ -1716,76 +2065,38 @@
             }, 500);
         }
 
-        // 把 sourceId 移到 targetId 之前或之后，立即重排并防抖持久化
-        function moveModule(sourceId, targetId, placeBefore) {
-            if (!sourceId || !targetId || sourceId === targetId) return;
-            const order = moduleLayout.slice();
-            const from = order.indexOf(sourceId);
-            if (from < 0) return;
-            order.splice(from, 1);
-            const to = order.indexOf(targetId);
-            if (to < 0) return;
-            order.splice(placeBefore ? to : to + 1, 0, sourceId);
-            applyModuleLayout(order);
-            scheduleModuleLayoutSave();
-        }
-
+        // 拖动排序交给 SortableJS（本地库 assets/js/sortable.min.js）：
+        // 它直接移动 DOM 节点，松手后的 DOM 顺序就是新顺序，避免手写 HTML5 DnD 的落点判据不可靠。
         function setupModuleDragAndDrop() {
             const grid = getById('module-grid');
             if (!grid) return;
-            // 移动端不做拖拽：只有 hover + 精细指针的环境才设置 draggable
+            // 触屏/粗指针不启用拖拽（保持原行为）
             const canDrag = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
-            let draggingId = null;
-            moduleGridNodes().forEach(node => {
-                const moduleId = node.dataset.module;
-                // cache-group 是整宽区，跨行换位无意义，登记进布局但不设 draggable
-                if (canDrag && moduleId !== 'cache-group') {
-                    node.setAttribute('draggable', 'true');
-                    node.addEventListener('dragstart', (e) => {
-                        draggingId = moduleId;
-                        node.classList.add('dragging');
-                        if (e.dataTransfer) {
-                            e.dataTransfer.setData('text/plain', moduleId);
-                            e.dataTransfer.effectAllowed = 'move';
-                        }
-                    });
-                    node.addEventListener('dragend', () => {
-                        draggingId = null;
-                        node.classList.remove('dragging');
-                        moduleGridNodes().forEach(peer => peer.classList.remove('drag-over'));
-                    });
+            if (!canDrag || typeof Sortable === 'undefined') return;
+            // 已初始化则跳过，避免重复绑定
+            if (grid._sortableInitialized) return;
+            grid._sortableInitialized = true;
+
+            Sortable.create(grid, {
+                animation: 150,
+                draggable: '[data-module]',
+                filter: '[data-module="cache-group"]',   // 整宽区不参与拖动
+                preventOnFilter: false,
+                ghostClass: 'module-ghost',
+                chosenClass: 'module-chosen',
+                dragClass: 'module-drag',
+                onEnd: () => {
+                    const order = moduleGridNodes()
+                        .map(n => n.dataset.module)
+                        .filter(Boolean);
+                    applyModuleLayout(order);       // 归一化后再写 order，保持内存状态一致
+                    scheduleModuleLayoutSave();      // 复用既有的 500ms 防抖保存
                 }
-                node.addEventListener('dragover', (e) => {
-                    if (!draggingId || draggingId === moduleId) return;
-                    e.preventDefault();
-                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                    node.classList.add('drag-over');
-                });
-                node.addEventListener('dragleave', () => node.classList.remove('drag-over'));
-                node.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    node.classList.remove('drag-over');
-                    const sourceId = draggingId || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
-                    if (!sourceId || sourceId === moduleId) return;
-                    const rect = node.getBoundingClientRect();
-                    // 落点在目标「前侧」插到前面，否则插到后面。
-                    // 容器是 auto-fit 横向多列，列数随视口变化，不硬编码列数：
-                    // 先用两卡片的 rect.top 判断是否同一行（差 < 高度的一半），
-                    // 同一行按水平轴比较 clientX，不同行按垂直轴比较 clientY。
-                    const sourceNode = moduleGridNodes().find(n => n.dataset.module === sourceId);
-                    const sourceRect = sourceNode ? sourceNode.getBoundingClientRect() : null;
-                    const sameRow = !!sourceRect && Math.abs(sourceRect.top - rect.top) < rect.height / 2;
-                    const placeBefore = sameRow
-                        ? e.clientX < rect.left + rect.width / 2
-                        : e.clientY < rect.top + rect.height / 2;
-                    moveModule(sourceId, moduleId, placeBefore);
-                });
             });
         }
         function setupEventListeners() {
             getById('refresh-now-btn').onclick = () => { refreshData(false, true); showToast('数据已手动刷新'); };
-            const autoRefreshToggle = getById('auto-refresh-toggle');
-            autoRefreshToggle.onchange = (e) => { const isEnabled = e.target.checked; localStorage.setItem('autoRefresh', isEnabled); if (isEnabled) { if (!autoRefreshTimer) autoRefreshTimer = setInterval(() => refreshData(false, true), REFRESH_INTERVAL); } else if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; } };
+            // 自动刷新只由日志页右上角下拉控制：首页只读 localStorage 'autoRefresh' 决定是否启动定时器，不提供 UI
 
             getById('flush-cache-btn').addEventListener('click', async () => { if (!confirm('确定清空全部缓存吗? 此操作将根据当前核心运行模式清空对应的缓存。')) { return; } const cacheToFlush = 'cache'; const path = `/plugins/${cacheToFlush}/flush`; try { const response = await fetch(path); if (!response.ok) { const errorText = await response.text(); throw new Error(`清空缓存失败于 ${path}: ${errorText || response.statusText}`); } showToast('全部缓存已清空，正在刷新数据...', 'success'); await refreshData(false, true); } catch (e) { showToast('清空缓存操作失败！', 'error'); showErrorModal(e.message); } });
             getById('restart-mosdns-btn').onclick = async () => { if (confirm('【危险操作】此操作将重启 MosDNS。确定要继续吗?')) { try { const response = await fetch('/api/v1/system/restart', { method: 'POST' }); if (!response.ok) { const errorText = await response.text(); throw new Error(errorText || `重启命令请求失败，状态码: ${response.status}`); } showToast('MosDNS 正在重启，页面即将刷新...'); setTimeout(() => location.reload(), 2000); } catch (e) { showToast('重启命令发送失败', 'error'); showErrorModal(e.message); } } };
@@ -1807,11 +2118,57 @@
             const diagnoseNameInput = getById('diagnose-name');
             if (diagnoseNameInput) diagnoseNameInput.onkeydown = (e) => { if (e.key === 'Enter') runDnsDiagnose(); };
             
-            const blurToggle = getById('blur-toggle'); const blurSlider = getById('blur-slider');
-            const setBlur = (value) => D.documentElement.style.setProperty('--glass-blur-strength', `${value}px`);
-            blurToggle.onchange = () => { const isEnabled = blurToggle.checked; blurSlider.disabled = !isEnabled; const value = isEnabled ? blurSlider.value : 0; setBlur(value); localStorage.setItem('blurEnabled', isEnabled); };
-            blurSlider.addEventListener('input', throttle(() => setBlur(blurSlider.value), 50));
-            blurSlider.onchange = () => localStorage.setItem('blurStrength', blurSlider.value);
+            // 毛玻璃：开关改 blurOnState，滑块按当前状态读取强度，两者共用同一份状态
+            const blurToggle = getById('blur-toggle');
+            const blurSlider = getById('blur-slider');
+            if (blurToggle) {
+                blurToggle.checked = blurOnState;
+                blurToggle.onchange = () => setBlurEnabled(blurToggle.checked);
+            }
+            if (blurSlider) {
+                blurSlider.addEventListener('input', throttle(() => {
+                    const value = parseInt(blurSlider.value, 10) || 0;
+                    D.documentElement.style.setProperty('--glass-blur-strength', (blurOnState ? value : 0) + 'px');
+                }, 50));
+                blurSlider.onchange = () => {
+                    const value = parseInt(blurSlider.value, 10) || 0;
+                    try { localStorage.setItem('blurStrength', String(value)); } catch (e) { }
+                    if (blurOnState) D.documentElement.style.setProperty('--glass-blur-strength', value + 'px');
+                };
+            }
+
+            // 界面密度跨标签页同步：日志页写 localStorage 时这边跟着换 html[data-layout]
+            window.addEventListener('storage', (e) => {
+                if (e.key !== 'mosdns-layout') return;
+                applyLayoutDensity();
+                renderFeatureSwitches();
+            });
+
+            // 功能开关：运行开关与功能/显示项全部走事件委托，渲染后无需重复绑定
+            const featureSection = D.querySelector('[data-module="feature-switches"]');
+            if (featureSection) {
+                featureSection.addEventListener('click', (e) => {
+                    const switchBtn = e.target.closest('[data-switch-tag]');
+                    if (switchBtn) { setFeatureSwitchValue(switchBtn.dataset.switchTag, switchBtn.dataset.switchValue); return; }
+                    const featureBtn = e.target.closest('[data-feature-action]');
+                    if (!featureBtn) return;
+                    const action = featureBtn.dataset.featureAction;
+                    if (action === 'audit') { toggleAuditCapture(); return; }
+                    if (action === 'layout') { setFeatureLayout(featureBtn.dataset.featureValue); return; }
+                    if (action === 'chart-mode') { setFeatureChartMode(featureBtn.dataset.featureValue); return; }
+                });
+                featureSection.addEventListener('change', (e) => {
+                    const target = e.target;
+                    const dataset = target.dataset || {};
+                    // 副开关（插件层）走委托：节点每次渲染都被 innerHTML 重建，逐节点绑定会静默断链
+                    if (target.id === 'adguard-enabled-toggle') { setAdguardEnabled(target.checked); return; }
+                    if (dataset.featureAction === 'update-auto') { setFeatureUpdateAuto(target.checked); return; }
+                    // 运行开关的滑块：按 data-slider-on/off 把二态翻译回服务端语义值
+                    if (dataset.sliderTag) {
+                        setFeatureSwitchValue(dataset.sliderTag, target.checked ? dataset.sliderOn : dataset.sliderOff);
+                    }
+                });
+            }
             
             const dataModal = getById('data-view-modal');
             const hideDataModal = () => { dataModal.classList.remove('visible'); if (dataModalSearchInput) { dataModalSearchInput.value = ''; dataModalSearchInput.oninput = null; } currentModalData = { type: null, rawEntries: [], filteredEntries: [], totalCount: 0, loadTime: 0 }; getById('data-modal-info').textContent = ''; };
@@ -2062,17 +2419,21 @@
         // --- 广告过滤总开关 / 今日统计 BEGIN ---
         // 按服务端返回值渲染开关：状态字段只写「开 / 关」，不出现 Enabled/Boolean 这类工具字
         function renderAdguardState(enabled) {
+            // 缓存服务端状态：renderFeatureSwitchRuntime() 每次重写 innerHTML 都会重建副开关，
+            // 重渲染时靠这份缓存复原勾选与文案，不让界面打回「读取中…」
+            adguardEnabledState = !!enabled;
             const toggle = getById('adguard-enabled-toggle');
             const text = getById('adguard-state-text');
             if (toggle) toggle.checked = !!enabled;
             if (!text) return;
-            text.innerText = '广告过滤: ' + (enabled ? '开' : '关');
+            text.innerText = '插件层: ' + (enabled ? '开' : '关');
             text.style.fontWeight = '';
             text.style.color = enabled ? 'var(--status-green)' : 'var(--label-color)';
         }
 
         // 状态不可信时整行标红；勾选保持上一次已确认的值，不跟着失败一起改
         function markAdguardStateError(message) {
+            adguardEnabledState = null;
             const text = getById('adguard-state-text');
             if (!text) return;
             text.innerText = message;
@@ -2094,7 +2455,7 @@
             try {
                 renderAdguardState(await fetchAdguardEnabled());
             } catch (e) {
-                markAdguardStateError('广告过滤: 状态未知');
+                markAdguardStateError('插件层: 状态未知');
             }
         }
 
@@ -2115,15 +2476,15 @@
             let actual = null;
             try { actual = await fetchAdguardEnabled(); } catch (e) { actual = null; }
             if (actual === null) {
-                markAdguardStateError('广告过滤: 回读校验失败');
+                markAdguardStateError('插件层: 回读校验失败');
                 showToast('广告过滤状态校验失败', 'error');
             } else if (postFailed) {
                 renderAdguardState(actual);
-                markAdguardStateError('广告过滤: ' + (actual ? '开' : '关') + '（切换失败）');
+                markAdguardStateError('插件层: ' + (actual ? '开' : '关') + '（切换失败）');
             } else if (actual !== enabled) {
                 // POST 返回成功但回读状态没变：按失败标红，不假装切换成功
                 renderAdguardState(actual);
-                markAdguardStateError('广告过滤: ' + (actual ? '开' : '关') + '（未生效）');
+                markAdguardStateError('插件层: ' + (actual ? '开' : '关') + '（未生效）');
                 showToast('广告过滤切换未生效', 'error');
             } else {
                 // 只有回读校验通过才提示成功
@@ -2260,13 +2621,10 @@
         }
 
         // 首页监控区统一刷新入口，已接入 refreshData 的加载与定时刷新流程
+        // 顺序是契约：#adguard-enabled-toggle 由 renderFeatureSwitchRuntime() 渲染，必须先渲染再写状态，
+        // 否则并行时早一步写入的开关状态随节点被替换而丢失（并行 Promise.all 存在此竞态）
         async function refreshPanelInsights() {
-            const toggle = getById('adguard-enabled-toggle');
-            if (toggle && !toggle.dataset.panelBound) {
-                // 只在首次挂载时绑定一次，避免每次刷新重复绑定
-                toggle.dataset.panelBound = '1';
-                toggle.onchange = function (e) { setAdguardEnabled(e.target.checked); };
-            }
+            await loadFeatureSwitches();
             await Promise.all([loadAdguardEnabled(), loadTodayStats(), loadAuditRecent()]);
         }
         // --- 广告过滤总开关 / 今日统计 / DNS 请求记录摘要 END ---
@@ -2288,6 +2646,8 @@
             // No need to initialize Mermaid here anymore
             dataModalSearchInput = getById('data-modal-search'); 
 
+            // 界面密度：首屏按 localStorage 里的 mosdns-layout 落到 html[data-layout]，与日志页共用同一个键
+            applyLayoutDensity();
             // 首次渲染：按服务端存档排好模块顺序（失败/超时静默降级为默认顺序），拖拽只在有鼠标的环境挂一次
             loadModuleLayout();
             setupModuleDragAndDrop();
@@ -2296,20 +2656,20 @@
             setupOffscreenAnimationPause();
             
             const savedTheme = localStorage.getItem('theme') || 'light';
-            const blurEnabled = localStorage.getItem('blurEnabled') !== 'false';
-            const blurStrength = localStorage.getItem('blurStrength') || 12;
-            const blurToggle = getById('blur-toggle'); const blurSlider = getById('blur-slider');
-            
-            blurToggle.checked = blurEnabled; blurSlider.value = blurStrength; blurSlider.disabled = !blurEnabled;
-            D.documentElement.style.setProperty('--glass-blur-strength', `${blurEnabled ? blurStrength : 0}px`);
+
+            // 毛玻璃初始态：开关 checked、滑块可用性与 --glass-blur-strength 都从同一份状态得出
+            blurOnState = localStorage.getItem('blurEnabled') !== 'false';
+            const blurToggleInit = getById('blur-toggle');
+            if (blurToggleInit) blurToggleInit.checked = blurOnState;
+            applyBlurState();
             
             setTheme(savedTheme);
 
             await refreshData(true, true);
             
+            // 自动刷新只由日志页右上角下拉写入 localStorage（'autoRefresh'），首页只读该键启动既有 REFRESH_INTERVAL 定时器
             const autoRefresh = localStorage.getItem('autoRefresh') === 'true';
-            getById('auto-refresh-toggle').checked = autoRefresh;
-            if (autoRefresh) getById('auto-refresh-toggle').dispatchEvent(new Event('change'));
+            if (autoRefresh && !autoRefreshTimer) autoRefreshTimer = setInterval(() => refreshData(false, true), REFRESH_INTERVAL);
             
             initializeTooltips();
 
