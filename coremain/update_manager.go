@@ -427,6 +427,10 @@ func (m *UpdateManager) PerformUpdate(ctx context.Context, force bool, preferV3 
 	}
 
 	if preferV3 && runtime.GOARCH == "amd64" && (runtime.GOOS == "linux" || runtime.GOOS == "windows") && cpuSupportsAMD64V3() {
+		if isSelfBuiltVersion(m.currentVersion) {
+			status.Message = "当前为自建版本，不提供 v3 构建切换（该路径会覆盖自研能力）。"
+			return UpdateActionResponse{Status: status}, errors.New(status.Message)
+		}
 		if lg := m.logger(); lg != nil {
 			lg.Info("prefer v3 requested; trying to switch asset")
 		}

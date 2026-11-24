@@ -123,6 +123,7 @@ func NewMosdns(cfg *Config) (*Mosdns, error) {
 	RegisterAliasesAPI(m.httpMux) // 客户端别名（IP -> 名字）
 	RegisterLayoutAPI(m.httpMux)  // 首页模块排版（panel_layout.json）
 	RegisterDiagnoseAPI(m.httpMux) // DNS 诊断（真实查询本机 5335）
+	RegisterSwitchesAPI(m.httpMux)  // 开关聚合（switchN 一次拿全）
 
 	// Start http api server
 	if httpAddr := cfg.API.HTTP; len(httpAddr) > 0 {
