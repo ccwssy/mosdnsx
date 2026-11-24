@@ -36,6 +36,10 @@ CLAUDE.md
 .cursorrules
 docs/*-prompt*.md
 docs/*-plan-*.md
+# 内部运维记录（事故复盘/部署记录/内部编号规格），不进公开仓
+docs/*-deploy-*.md
+docs/*-pitfall-*.md
+docs/*-t[0-9]*-*.md
 evidence/
 report/
 log/
