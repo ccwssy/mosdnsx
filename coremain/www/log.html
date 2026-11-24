@@ -477,7 +477,7 @@
         [hidden] { display: none !important; }
         .info-icon { color: var(--color-text-secondary); cursor: help; margin-left: 0.5rem; }
 
-        /* --- T10 渲染重成本单元懒化 --- */
+        /* --- 渲染重成本单元懒化 --- */
         /* 表格滚动容器：不在视口内时跳过布局与绘制，降低切 tab 时的一次性渲染成本 */
         .scrollable-table-container {
             content-visibility: auto;
@@ -1340,45 +1340,27 @@
                         </span>
                         <small class="tip-text">设置新容量将清空日志。</small>
                     </div>
-                </div>
-                <div class="control-module control-module--mini" id="appearance-module">
-                    <h3><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path
-                                d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM11 7H13V12L16.5 15.5L15.0858 16.9142L11 12.8284V7Z">
-                            </path>
-                        </svg>主题与外观</h3>
+                    <!-- 落盘保留策略：与上面的"内存容量"是两件事，UI 上分开表达 -->
                     <div class="control-item">
-                        <strong>颜色主题</strong>
-                        <div class="color-palette">
-                            <button class="color-swatch" data-color="indigo" style="background-color: #4f46e5;" title="靛蓝" aria-label="靛蓝"></button>
-                            <button class="color-swatch" data-color="pink" style="background-color: #ec4899;" title="粉色" aria-label="粉色"></button>
-                            <button class="color-swatch" data-color="teal" style="background-color: #14b8a6;" title="青色" aria-label="青色"></button>
-                            <button class="color-swatch" data-color="orange" style="background-color: #f97316;" title="橙色" aria-label="橙色"></button>
-                            <button class="color-swatch" data-color="green" style="background-color: #22c55e;" title="绿色" aria-label="绿色"></button>
-                            <button class="color-swatch" data-color="violet" style="background-color: #8b5cf6;" title="紫色" aria-label="紫色"></button>
-                        </div>
+                        <strong>当前占用:</strong> <span id="audit-dir-usage">查询中...</span>
                     </div>
-                    <!-- 主题选择已移除：主题唯一真源是首页 themeMap，本页只读展示并跟随（见 log.js homeAppearance） -->
-                    <div class="control-item">
-                        <strong>界面主题</strong>
-                        <span class="theme-readonly">
-                            <span id="theme-current-name">跟随首页</span>
-                            <span class="theme-readonly-hint">主题在首页「外观设置」中修改，<a href="/">去首页设置</a></span>
+                    <form id="retention-form">
+                        <label for="retention-days" class="field-label">日志保留天数</label>
+                        <input type="number" id="retention-days" min="1" max="90" step="1" aria-label="日志保留天数">
+                        <label for="file-max-mb" class="field-label">单文件上限 (MB)</label>
+                        <input type="number" id="file-max-mb" min="8" max="512" step="1" aria-label="单个日志文件体积上限">
+                        <button type="submit" class="button primary" data-default-text="保存"><span>保存</span></button>
+                    </form>
+                    <div class="control-item tip-inline" style="margin-top: -0.25rem;">
+                        <span class="info-inline" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14"
+                                height="14" aria-hidden="true">
+                                <path
+                                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v2h-2V7zm0 4h2v6h-2v-6z">
+                                </path>
+                            </svg>
                         </span>
-                    </div>
-                    <div class="control-item">
-                        <strong>界面密度</strong>
-                        <select id="layout-density-select" aria-label="界面密度">
-                            <option value="comfortable">舒适</option>
-                            <option value="compact">紧凑</option>
-                        </select>
-                    </div>
-                    <div class="control-item" style="justify-content: space-between;">
-                        <strong>独立图表模式</strong>
-                        <label class="switch">
-                            <input type="checkbox" id="overview-chart-mode-toggle">
-                            <span class="slider"></span>
-                        </label>
+                        <small class="tip-text">过期日志会在滚动时自动清理；调小保留天数后旧文件在下一轮清理时删除。</small>
                     </div>
                 </div>
 
@@ -1473,10 +1455,7 @@
                     <div class="update-auto">
                         <div class="control-item">
                             <strong>自动检查</strong>
-                            <label class="switch" style="margin-left:auto;">
-                                <input type="checkbox" id="update-auto-toggle">
-                                <span class="slider"></span>
-                            </label>
+                            <span class="control-hint" style="margin-left:auto;">开关已移至首页「功能开关」</span>
                         </div>
                         <div class="update-auto-grid">
                             <label for="update-interval-input" class="field-label">间隔 (分钟)</label>
@@ -1503,11 +1482,14 @@
                         <button id="upstream-restart-btn" class="button primary" style="width: auto;">重启 MosDNS</button>
                     </div>
                 </div>
+
             </div>
         </section>
     </main>
 
-    <script src="assets/js/log.js?v=20261124b" defer></script>
+    <!-- 拖动排序：本地引用的 SortableJS（断网/内网可用，禁止改 CDN）；defer 按文档顺序执行，Sortable 先就绪 -->
+    <script src="assets/js/sortable.min.js" defer></script>
+    <script src="assets/js/log.js?v=20261124e" defer></script>
 </body>
 
 </html>

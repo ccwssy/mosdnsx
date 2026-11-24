@@ -325,6 +325,10 @@ td .tag-count,
     gap: 0.75rem;
     margin-left: auto;
     max-width: 100%;
+    /* 整组不压缩：装不下时由 page-header 的 flex-wrap 换行，而不是把导航条挤掉半个 */
+    flex-shrink: 0;
+    /* 组内放不下时自身换行（小屏），避免定宽导航条溢出容器 */
+    flex-wrap: wrap;
 }
 
 .last-updated {
@@ -337,6 +341,9 @@ td .tag-count,
     position: relative;
     overflow-x: auto;
     overflow-y: hidden;
+    /* 导航条是定宽内容块：不许被右侧 last-updated / 刷新下拉 / 刷新按钮挤压。
+       缺这条时 flex 容器会缩它，配合自身 overflow-x:auto 就变成"只露出半截 tab"。 */
+    flex-shrink: 0;
 }
 
 .main-nav {
@@ -761,6 +768,19 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
     gap: 1rem;
 }
 
+/* 落盘保留策略：标签+输入一行，按钮独占一行；与上面的内存容量表单视觉区分但同构 */
+#retention-form {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+#retention-form button {
+    grid-column: 1 / -1;
+}
+
 a.control-item-link {
     all: unset;
     box-sizing: border-box;
@@ -1023,25 +1043,20 @@ input[type="search"]:focus {
 }
 
 /* /log 概览页模块拖动排版（与首页同一套视觉语言）。
-   拖拽态只动 opacity / transform，drop 目标高亮用 outline —— border 会改变盒模型触发重排。 */
-[data-module][draggable="true"] {
+   拖拽视觉态由 SortableJS 的 ghost/chosen 类驱动，不再用原生 draggable 属性。
+   只动 opacity / transform —— border 会改变盒模型触发重排。 */
+.overview-grid > [data-module] {
     cursor: grab;
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-[data-module][draggable="true"]:active {
-    cursor: grabbing;
+.log-module-ghost {
+    opacity: 0.4;
 }
 
-[data-module].dragging {
-    opacity: 0.5;
+.log-module-chosen {
+    cursor: grabbing;
     transform: scale(0.98);
-    cursor: grabbing;
-}
-
-[data-module].drag-over {
-    outline: 2px dashed var(--color-accent-primary);
-    outline-offset: 2px;
 }
 
 #log-query-table-container {
@@ -2355,6 +2370,10 @@ dialog.card:hover {
     border-color: var(--color-accent-primary);
 }
 
+.role-badge { font-size: .7rem; padding: .1rem .35rem; border-radius: .25rem;
+              background: var(--color-bg-tertiary,var(--color-bg-alt)); color: var(--color-text-secondary);
+              margin-left: .4rem; }
+
 .list-mgmt-content {
     display: flex;
     flex-direction: column;
@@ -3053,7 +3072,8 @@ dialog.card:hover {
     }
 
     .button-group,
-    #capacity-form {
+    #capacity-form,
+    #retention-form {
         grid-template-columns: 1fr;
         gap: 0.75rem;
     }
@@ -3552,11 +3572,13 @@ dialog.card:hover {
     }
 
     /* Log Capacity Module */
-    #capacity-form {
+    #capacity-form,
+    #retention-form {
         grid-template-columns: 1fr;
     }
 
-    #capacity-form button {
+    #capacity-form button,
+    #retention-form button {
         width: 100%;
     }
 
@@ -3607,3 +3629,68 @@ dialog.card:hover {
     }
 }
 
+/* ============================================================
+   开关中心（系统 → 开关中心）
+   三组控件共用 .switch-row；窄屏靠 flex-wrap 换行兜底
+   ============================================================ */
+.switch-group {
+    margin-bottom: 1.5rem;
+}
+
+.switch-group:last-child {
+    margin-bottom: 0;
+}
+
+.switch-group h4 {
+    font-size: .9rem;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: .75rem;
+}
+
+.switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .75rem 0;
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+.switch-row:last-child {
+    border-bottom: none;
+}
+
+.switch-row-main {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.switch-row-main strong {
+    display: block;
+    margin-bottom: .15rem;
+}
+
+.switch-row-controls {
+    display: flex;
+    gap: .4rem;
+    flex-shrink: 0;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.switch-value-btn {
+    padding: .35rem .8rem;
+    font-size: .85rem;
+}
+
+/* 卡片多选：沿用行内小标签样式，与按钮组同处 .switch-row-controls */
+.switch-check {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .85rem;
+    white-space: nowrap;
+}

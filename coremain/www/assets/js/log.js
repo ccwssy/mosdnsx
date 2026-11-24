@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sparklineTotal: document.getElementById('sparkline-total'), sparklineAvg: document.getElementById('sparkline-avg'),
         auditStatus: document.getElementById('audit-status'), toggleAuditBtn: document.getElementById('toggle-audit-btn'), clearAuditBtn: document.getElementById('clear-audit-btn'),
         auditCapacity: document.getElementById('audit-capacity'), capacityForm: document.getElementById('capacity-form'), newCapacityInput: document.getElementById('new-capacity'),
+        auditDirUsage: document.getElementById('audit-dir-usage'), retentionForm: document.getElementById('retention-form'), retentionDaysInput: document.getElementById('retention-days'), fileMaxMbInput: document.getElementById('file-max-mb'),
         cacheStatsTbody: document.getElementById('cache-stats-tbody'),
         topDomainsBody: document.getElementById('top-domains-body'), topClientsBody: document.getElementById('top-clients-body'), slowestQueriesBody: document.getElementById('slowest-queries-body'), topBlockedBody: document.getElementById('top-blocked-body'),
         shuntResultsBody: document.getElementById('shunt-results-body'),
@@ -156,7 +157,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 轻量级请求器 + /metrics 简易缓存，减少同一时段的重复请求
     let __metricsInflight = null; let __metricsStamp = 0;
-    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v1: { getUpstreamStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/upstream/stats`, { signal }) }, v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getBlockedDomains: (signal, limit = 10) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?blocked=true&limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50, since = null) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}${since ? '&since=' + encodeURIComponent(since) : ''}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
+    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }),
+        getAuditSettings: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/settings`, { signal }),
+        // 两项都可选：只提交调用方给到的字段，缺省即"不改"
+        setAuditSettings: (payload) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v1: { getUpstreamStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/upstream/stats`, { signal }) }, v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getBlockedDomains: (signal, limit = 10) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?blocked=true&limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50, since = null) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}${since ? '&since=' + encodeURIComponent(since) : ''}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
 
     const updateApi = {
         getStatus: (signal) => api.fetch(`/api/v1/update/status`, { signal }),
@@ -173,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 客户端别名 API：对接后端 coremain/api_aliases.go 的 /api/v1/aliases 接口
     const aliasesApi = {
-        // 读取整张别名表：{ "192.168.2.18": "Nova14U" }
+        // 读取整张别名表：{ "10.0.0.5": "office-pc" }
         get: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/aliases/`),
         // 写入单条别名；name 传空字符串时后端按删除处理
         set: (ip, name) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/aliases/`, {
@@ -192,6 +196,27 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoading(button, isLoading) { if (!button) return; const textSpan = button.querySelector('span'); button.disabled = isLoading; button.setAttribute('aria-busy', String(isLoading)); if (textSpan) { if (isLoading) { if (!button.dataset.defaultText) { button.dataset.defaultText = textSpan.textContent; } textSpan.textContent = '处理中...'; } else { if (button.dataset.defaultText) { textSpan.textContent = button.dataset.defaultText; } } } },
         updateStatus(isCapturing) { if (!elements.toggleAuditBtn || !elements.auditStatus) return; this.setLoading(elements.toggleAuditBtn, false); const statusIndicator = elements.systemControlTabIndicator; if (statusIndicator) statusIndicator.className = 'status-indicator'; if (typeof isCapturing === 'boolean') { state.isCapturing = isCapturing; elements.auditStatus.textContent = isCapturing ? '运行中' : '已停止'; elements.auditStatus.style.color = isCapturing ? 'var(--color-success)' : 'var(--color-danger)'; const actionText = isCapturing ? '关闭审计' : '开启审计'; elements.toggleAuditBtn.querySelector('span').textContent = actionText; elements.toggleAuditBtn.dataset.defaultText = actionText; elements.toggleAuditBtn.className = `button ${isCapturing ? 'danger' : 'primary'}`; if (statusIndicator) statusIndicator.classList.add(isCapturing ? 'running' : 'stopped'); } else { elements.auditStatus.textContent = '未知'; elements.auditStatus.style.color = 'var(--color-text-secondary)'; elements.toggleAuditBtn.querySelector('span').textContent = '刷新状态'; elements.toggleAuditBtn.dataset.defaultText = '刷新状态'; } },
         updateCapacity(capacity) { if (elements.auditCapacity) elements.auditCapacity.textContent = capacity != null ? `${capacity.toLocaleString()} 条` : '查询失败'; },
+        // 落盘占用与保留策略：GET 失败时只让"当前占用"显示查询失败，不阻塞容量那条独立链路
+        updateAuditSettings(settings) {
+            if (elements.auditDirUsage) {
+                if (settings && typeof settings.audit_dir_bytes === 'number') {
+                    const mb = settings.audit_dir_bytes / (1024 * 1024);
+                    const count = typeof settings.audit_file_count === 'number' ? settings.audit_file_count : 0;
+                    elements.auditDirUsage.textContent = `${mb.toFixed(2)} MB（${count} 个文件）`;
+                } else {
+                    elements.auditDirUsage.textContent = '查询失败';
+                }
+            }
+            // 输入框只在用户没在编辑时回填，避免刷新覆盖正在输入的值
+            if (settings) {
+                if (elements.retentionDaysInput && document.activeElement !== elements.retentionDaysInput) {
+                    elements.retentionDaysInput.value = settings.retention_days ?? '';
+                }
+                if (elements.fileMaxMbInput && document.activeElement !== elements.fileMaxMbInput) {
+                    elements.fileMaxMbInput.value = settings.file_max_mb ?? '';
+                }
+            }
+        },
         updateOverviewStats() {
             const { avgDuration, todayQueries, blocked } = state.data;
             // 今日查询：主值取 /api/v2/audit/stats 的 today_queries，字段缺失时保持 --
@@ -338,9 +363,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const autoCfg = this.loadAutoConfig();
             state.update.auto.enabled = autoCfg.enabled;
             state.update.auto.intervalMinutes = autoCfg.interval;
-            elements.updateAutoToggle.checked = autoCfg.enabled;
+            // 本页不再有开关中心，#update-auto-toggle 的 DOM 已不存在，这里只做存在性回填
+            if (elements.updateAutoToggle) elements.updateAutoToggle.checked = autoCfg.enabled;
             elements.updateIntervalInput.value = autoCfg.interval;
-            elements.updateAutoToggle.addEventListener('change', () => {
+            elements.updateAutoToggle?.addEventListener('change', () => {
                 state.update.auto.enabled = elements.updateAutoToggle.checked;
                 this.persistAutoConfig();
                 this.applyAutoSchedule(true);
@@ -553,9 +579,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             this.refreshButtons();
 
-            // v3 提示：仅在 amd64、CPU 支持 v3 且当前不是 v3 构建时显示
+            // v3 提示：仅在 amd64、CPU 支持 v3、当前不是 v3 构建、且不是自建版本时显示
             const arch = (status.architecture || '');
-            const showV3 = (arch === 'linux/amd64' || arch === 'windows/amd64') && status.amd64_v3_capable && !status.current_is_v3;
+            const curVer = (status.current_version || '').toLowerCase();
+            const isSelfBuilt = curVer.startsWith('v5.3.4-mosdnsx') || curVer.includes('-mosdnsx');
+            const showV3 = !isSelfBuilt
+                && (arch === 'linux/amd64' || arch === 'windows/amd64')
+                && status.amd64_v3_capable
+                && !status.current_is_v3;
             if (elements.updateV3Callout) {
                 elements.updateV3Callout.style.display = showV3 ? 'grid' : 'none';
             }
@@ -967,7 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             elements.layoutSwitcher?.addEventListener('change', e => this.setLayout(e.target.value));
             elements.overviewChartModeToggle?.addEventListener('change', e => this.setChartMode(e.target.checked ? 'independent' : 'integrated'));
-            elements.colorSwatches.forEach(swatch => { swatch.addEventListener('click', () => this.setColor(swatch.dataset.color)); });
+            elements.colorSwatches?.forEach(swatch => { swatch.addEventListener('click', () => this.setColor(swatch.dataset.color)); });
         },
         setColor(color, save = true) {
             elements.html.setAttribute('data-color-scheme', color);
@@ -1454,7 +1485,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 'alidns-223': '阿里 DNS · 223.5.5.5',
                 'alidns-112': '阿里 DNS · 1.12.12.12',
                 'openclash': 'OpenClash（国外出口）',
-                'gateway': '上游网关 · 192.168.2.1'
+                'gateway': '上游网关'
             };
             const displayName = UPSTREAM_DISPLAY_NAMES[upstream] || upstream;
             // OpenClash 是国外流量的统一出口，其内部再选 Google/Cloudflare 等，这里不可细分
@@ -1550,7 +1581,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const logLayoutManager = {
         layout: DEFAULT_LOG_MODULE_LAYOUT.slice(),
         saveTimer: null,
-        draggingId: null,
 
         grid() { return document.querySelector('.overview-grid'); },
 
@@ -1575,9 +1605,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const grid = this.grid();
             if (!grid) return;
             this.layout = this.normalize(order);
-            this.layout.forEach((id, index) => {
+            // SortableJS 直接搬 DOM 节点、并按元素真实位置判落点：把 DOM 顺序对齐到 layout 并清掉内联 order，
+            // 否则"CSS order 显示的顺序"与"DOM 顺序"各说各话，拖动落点会错位。
+            this.layout.forEach((id) => {
                 const node = grid.querySelector(`[data-module="${id}"]`);
-                if (node) node.style.order = String(index);
+                if (node) {
+                    node.style.order = '';
+                    grid.appendChild(node);
+                }
             });
         },
 
@@ -1631,68 +1666,36 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 500);
         },
 
-        // 把 sourceId 移到 targetId 之前/之后，立即重排并防抖持久化
-        move(sourceId, targetId, placeBefore) {
-            if (!sourceId || !targetId || sourceId === targetId) return;
-            const order = this.layout.slice();
-            const from = order.indexOf(sourceId);
-            if (from < 0) return;
-            order.splice(from, 1);
-            const to = order.indexOf(targetId);
-            if (to < 0) return;
-            order.splice(placeBefore ? to : to + 1, 0, sourceId);
-            this.apply(order);
-            this.scheduleSave();
-        },
-
-        // 原生 HTML5 DnD：只有 hover + 精细指针环境才设 draggable，移动端不挂拖拽
-        setupDragAndDrop() {
+        // 拖动排序交给 SortableJS（本地库 assets/js/sortable.min.js，随 log.html 的 defer 先于本文件执行）：
+        // 它直接移动 DOM 节点，松手后的 DOM 顺序即新顺序，避免手写 HTML5 DnD 的落点判据不可靠。
+        initSortable() {
             const grid = this.grid();
             if (!grid) return;
-            const canDrag = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-            const nodes = Array.from(grid.querySelectorAll('[data-module]'));
-            nodes.forEach(node => {
-                const moduleId = node.dataset.module;
-                if (canDrag) {
-                    node.setAttribute('draggable', 'true');
-                    node.addEventListener('dragstart', (e) => {
-                        this.draggingId = moduleId;
-                        node.classList.add('dragging');
-                        if (e.dataTransfer) {
-                            e.dataTransfer.setData('text/plain', moduleId);
-                            e.dataTransfer.effectAllowed = 'move';
-                        }
-                    });
-                    node.addEventListener('dragend', () => {
-                        this.draggingId = null;
-                        node.classList.remove('dragging');
-                        nodes.forEach(peer => peer.classList.remove('drag-over'));
-                    });
+            const canDrag = window.matchMedia('(hover:hover) and (pointer:fine)').matches;
+            if (!canDrag || typeof Sortable === 'undefined') return;
+            if (grid._sortableInitialized) return;
+            grid._sortableInitialized = true;
+
+            Sortable.create(grid, {
+                animation: 150,
+                draggable: '[data-module]',
+                ghostClass: 'log-module-ghost',
+                chosenClass: 'log-module-chosen',
+                onEnd: () => {
+                    const order = Array.from(grid.querySelectorAll('[data-module]'))
+                        .map(n => n.dataset.module)
+                        .filter(Boolean);
+                    this.apply(order);    // 复用既有 normalize + order 赋值
+                    this.scheduleSave();  // 复用既有防抖保存
                 }
-                node.addEventListener('dragover', (e) => {
-                    if (!this.draggingId || this.draggingId === moduleId) return;
-                    e.preventDefault();
-                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                    node.classList.add('drag-over');
-                });
-                node.addEventListener('dragleave', () => node.classList.remove('drag-over'));
-                node.addEventListener('drop', (e) => {
-                    if (!this.draggingId || this.draggingId === moduleId) return;
-                    e.preventDefault();
-                    node.classList.remove('drag-over');
-                    // 落点按鼠标在中线的前半/后半决定插入到目标之前还是之后
-                    const rect = node.getBoundingClientRect();
-                    const placeBefore = (e.clientX - rect.left) < rect.width / 2;
-                    this.move(this.draggingId, moduleId, placeBefore);
-                    this.draggingId = null;
-                });
             });
         },
 
         async init() {
             if (!this.grid()) return;
-            this.setupDragAndDrop();
             await this.load();
+            // load() 无论成功还是降级都渲染完 DOM 了，拖拽在这里挂一次
+            this.initSortable();
         }
     };
 
@@ -1755,6 +1758,13 @@ document.addEventListener('DOMContentLoaded', () => {
 //                    sysPromises.push(updateManager.refreshStatus(false));
                 }
                 
+                // 日志保留策略与目录占用：轻量 GET，切到系统页就刷新，不等 forceAll
+                sysPromises.push(
+                    api.getAuditSettings(signal)
+                        .then(settings => ui.updateAuditSettings(settings))
+                        .catch(error => { if (error && error.name !== 'AbortError') ui.updateAuditSettings(null); })
+                );
+
                 if (sysPromises.length > 0) {
                     await Promise.allSettled(sysPromises);
                 }
@@ -2161,7 +2171,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const autoRefreshManager = {
         start() { this.stop(); if (state.autoRefresh.enabled && state.autoRefresh.intervalSeconds >= 5) { state.autoRefresh.intervalId = setInterval(() => updatePageData(false), state.autoRefresh.intervalSeconds * 1000); } },
         stop() { clearInterval(state.autoRefresh.intervalId); state.autoRefresh.intervalId = null; },
-        updateSettings(enabled, seconds) { state.autoRefresh.enabled = enabled; state.autoRefresh.intervalSeconds = Math.max(seconds, 5); localStorage.setItem('mosdnsAutoRefresh', JSON.stringify({ enabled, intervalSeconds: state.autoRefresh.intervalSeconds })); ui.showToast(`自动刷新已${enabled ? `开启, 频率: ${state.autoRefresh.intervalSeconds}秒` : '关闭'}`, 'success'); this.start(); },
+        updateSettings(enabled, seconds) {
+            state.autoRefresh.enabled = enabled;
+            state.autoRefresh.intervalSeconds = Math.max(seconds, 5);
+            try {
+                localStorage.setItem('mosdnsAutoRefresh',
+                    JSON.stringify({ enabled: enabled, intervalSeconds: state.autoRefresh.intervalSeconds }));
+                // 首页仍读字符串键 autoRefresh（'true'/'false'），两边必须同时写
+                localStorage.setItem('autoRefresh', enabled ? 'true' : 'false');
+            } catch (error) { }
+            ui.showToast(`自动刷新已${enabled ? `开启, 频率: ${state.autoRefresh.intervalSeconds}秒` : '关闭'}`, 'success');
+            this.start();
+        },
         // 任意秒数映射到最近的固定档位；关闭态一律落到 0
         presetFor(enabled, seconds) {
             if (!enabled) return 0;
@@ -2199,6 +2220,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const activeTabId = targetLink.dataset.tab;
         elements.tabContents.forEach(el => el.classList.toggle('active', el.id === `${activeTabId}-tab`));
         // 系统控制页采用懒加载；不在切换时主动拉取重数据，由模块可见时触发
+        // 例外：日志保留策略是轻量 GET，切到系统页就取一次，否则用户看到的是空输入框
+        if (activeTabId === 'system-control') {
+            api.getAuditSettings()
+                .then(settings => ui.updateAuditSettings(settings))
+                .catch(() => ui.updateAuditSettings(null));
+        }
         if (activeTabId === 'log-query' && state.displayedLogs.length === 0) {
             applyLogFilterAndRender();
         } else if (activeTabId === 'rules') {
@@ -2794,7 +2821,10 @@ const cacheManager = {
                                 name: this.LIST_DISPLAY_NAMES[item.tag] || item.name || item.tag,
                                 editable: item.editable !== false,
                                 // kind 决定右侧渲染哪种编辑器：sd_set / si_set 是数据源管理，其余按文本编辑器
-                                kind: item.kind || 'text'
+                                kind: item.kind || 'text',
+                                // role 是目录语义（user / download / patch / source_config / source_data），
+                                // 后端未升级时不返回该字段，一律按 unknown 处理，行为与改造前一致。
+                                role: item.role || 'unknown'
                             }));
                     }
                 }
@@ -2861,7 +2891,16 @@ const cacheManager = {
                     link.href = '#';
                     link.className = 'list-mgmt-link';
                     link.dataset.listTag = item.tag;
+                    // 名字仍用 textContent 赋值（保持既有行为与转义），role 标记以 span 追加；
+                    // 不用 innerHTML 拼名字，避免把名单名当 HTML 解析。
                     link.textContent = item.name || item.tag;
+                    const badgeText = this.roleBadgeText(item.role);
+                    if (badgeText) {
+                        const badge = document.createElement('span');
+                        badge.className = 'role-badge';
+                        badge.textContent = badgeText;
+                        link.appendChild(badge);
+                    }
                     if (item.tag === activeTag) link.classList.add('active');
                     elements.listMgmtNav.appendChild(link);
                 });
@@ -2878,7 +2917,28 @@ const cacheManager = {
             elements.listContentTextArea.readOnly = !editable;
             elements.listSaveBtn.disabled = !editable;
             const hint = this.ensureReadonlyHint();
-            if (hint) hint.style.display = editable ? 'none' : 'block';
+            if (hint) {
+                // 提示文案按目录语义分支；profile 缺失或 role 未知时沿用原文案，绝不报错
+                hint.textContent = this.readonlyHintText(profile ? profile.role : '');
+                hint.style.display = editable ? 'none' : 'block';
+            }
+        },
+
+        // roleBadgeText 把目录语义映射成 nav 上的小标记：download 标「自动」、patch 标「补丁」，
+        // user 保持现状不标记；unknown / source_config / source_data 同样不标记。
+        roleBadgeText(role) {
+            if (role === 'download') return '自动';
+            if (role === 'patch') return '补丁';
+            return '';
+        },
+
+        // readonlyHintText 生成只读提示文案：架构自动维护的目录指向「对应位置」，
+        // 其余（user / unknown / 缺失字段）沿用原来的数据源提示。
+        readonlyHintText(role) {
+            if (role === 'download' || role === 'patch') {
+                return '该名单由架构自动维护（' + role + '），修改请到对应位置';
+            }
+            return '此名单由数据源自动生成，修改请到『数据源管理』，手工改动会被自动更新覆盖';
         },
 
         // ensureReadonlyHint 懒创建只读提示段落并插到文本框之前；容器缺失时返回 null。
@@ -2890,7 +2950,7 @@ const cacheManager = {
             const hint = document.createElement('p');
             hint.id = 'list-mgmt-readonly-hint';
             hint.style.cssText = 'display: none; font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.75rem;';
-            hint.textContent = '此名单由数据源自动生成，修改请到『数据源管理』，手工改动会被自动更新覆盖';
+            hint.textContent = this.readonlyHintText('');
             container.insertBefore(hint, textarea);
             this.readonlyHint = hint;
             return hint;
@@ -3637,6 +3697,43 @@ const cacheManager = {
             }
         });
 
+        // 日志保留策略：保留天数 / 单文件上限，两项一起提交，改完即时生效（无需重启进程）
+        elements.retentionForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const daysRaw = elements.retentionDaysInput ? elements.retentionDaysInput.value.trim() : '';
+            const mbRaw = elements.fileMaxMbInput ? elements.fileMaxMbInput.value.trim() : '';
+            const days = daysRaw === '' ? null : parseInt(daysRaw, 10);
+            const mb = mbRaw === '' ? null : parseInt(mbRaw, 10);
+            if (days !== null && (!Number.isFinite(days) || days < 1 || days > 90)) {
+                ui.showToast('日志保留天数需在 1 到 90 之间', 'error');
+                return;
+            }
+            if (mb !== null && (!Number.isFinite(mb) || mb < 8 || mb > 512)) {
+                ui.showToast('单文件上限需在 8 到 512 MB 之间', 'error');
+                return;
+            }
+            if (days === null && mb === null) {
+                ui.showToast('请至少填写一项', 'error');
+                return;
+            }
+            const payload = {};
+            if (days !== null) payload.retention_days = days;
+            if (mb !== null) payload.file_max_mb = mb;
+            const btn = e.currentTarget.querySelector('button');
+            ui.setLoading(btn, true);
+            try {
+                await api.setAuditSettings(payload);
+                ui.showToast('日志保留策略已保存', 'success');
+                // 重新拉一次 GET：刷新"当前占用"，并把规范化后的值回填到输入框
+                const settings = await api.getAuditSettings();
+                ui.updateAuditSettings(settings);
+            } catch (error) {
+                console.error('Save audit settings failed:', error);
+            } finally {
+                ui.setLoading(btn, false);
+            }
+        });
+
         // 搜索框连续键入：300ms 防抖后才触发一次查询，避免每个字符都重建表格；分页按钮点击本身低频，保持立即响应
         elements.logSearch?.addEventListener('input', debounce(applyLogFilterAndRender, 300));
         // 日志表格滚动到底部附近自动加载下一页：节流 100ms（trailing 保证最后一次滚动状态生效）
@@ -4102,9 +4199,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const id = mod.id;
 
             // 按 ID 分配类别
-            if (id === 'appearance-module') {
-                mod.dataset.category = 'basic';
-            } else if (id === 'system-info-module' || id === 'update-module') {
+            if (id === 'system-info-module' || id === 'update-module') {
                 mod.dataset.category = 'system';
             } else if (mod.querySelector('#cache-stats-table')) {
                 mod.dataset.category = 'data';
@@ -4123,9 +4218,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (mod.dataset.category) return; // 已分类跳过
 
                 const id = mod.id;
-                if (id === 'appearance-module') {
-                    mod.dataset.category = 'basic';
-                } else if (id === 'system-info-module' || id === 'update-module') {
+                if (id === 'system-info-module' || id === 'update-module') {
                     mod.dataset.category = 'system';
                 } else if (mod.querySelector('#cache-stats-table')) {
                     mod.dataset.category = 'data';
