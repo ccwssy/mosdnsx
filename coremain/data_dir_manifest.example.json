@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "directories": {
+    "diydata":  {"role": "user",          "editable": true,  "path": "data/rule/diydata",  "desc": "用户自建名单（面板可编辑，永不被自动更新覆盖）"},
+    "txtdata":  {"role": "download",      "editable": false, "path": "data/rule/txtdata",  "desc": "auto_update.sh 每日下载的主名单"},
+    "txtpatch": {"role": "patch",         "editable": false, "path": "data/rule/txtpatch", "desc": "静态补丁，补齐 srs→txt 迁移时的条目损失"},
+    "srscfg":   {"role": "source_config", "editable": false, "path": "data/rule/srscfg",   "desc": "数据源配置 json（sd_*/si_*）"},
+    "srsdata":  {"role": "source_data",   "editable": false, "path": "data/srsdata",       "desc": "srs 规则集二进制"}
+  },
+  "managed_roles": ["user"]
+}
