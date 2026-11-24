@@ -76,7 +76,6 @@
         #update-current-version,
         #update-latest-version,
         #audit-capacity,
-        #auto-refresh-interval,
         #update-interval-input,
         #new-capacity {
             font-variant-numeric: tabular-nums;
@@ -529,6 +528,14 @@
                     </nav>
                 </div>
                 <span id="last-updated" class="last-updated"></span>
+                <select id="page-auto-refresh-select" aria-label="自动刷新频率" title="自动刷新频率">
+                    <option value="0">不刷新</option>
+                    <option value="5">5秒</option>
+                    <option value="10">10秒</option>
+                    <option value="15">15秒</option>
+                    <option value="30">30秒</option>
+                    <option value="60">1分钟</option>
+                </select>
                 <button id="global-refresh-btn" class="refresh-btn" title="刷新数据" aria-label="刷新数据" aria-busy="false">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1334,29 +1341,6 @@
                         <small class="tip-text">设置新容量将清空日志。</small>
                     </div>
                 </div>
-                <div class="control-module control-module--mini" id="auto-refresh-module">
-                    <h3><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path
-                                d="M12 2.5C12.4142 2.5 12.75 2.83579 12.75 3.25V5.03131C15.2635 5.50376 17.25 7.49021 17.7224 9.99993H19.5C19.9142 9.99993 20.25 10.3357 20.25 10.75V13.25C20.25 13.6642 19.9142 14 19.5 14H17.7224C17.25 16.5097 15.2635 18.4962 12.75 18.9686V20.75C12.75 21.1642 12.4142 21.5 12 21.5C11.5858 21.5 11.25 21.1642 11.25 20.75V18.9686C8.73652 18.4962 6.75 16.5097 6.27758 14H4.5C4.08579 14 3.75 13.6642 3.75 13.25V10.75C3.75 10.3357 4.08579 9.99993 4.5 9.99993H6.27758C6.75 7.49021 8.73652 5.50376 11.25 5.03131V3.25C11.25 2.83579 11.5858 2.5 12 2.5ZM12 7C9.23858 7 7 9.23858 7 12C7 14.7614 9.23858 17 12 17C14.7614 17 17 14.7614 17 12C17 9.23858 14.7614 7 12 7Z">
-                            </path>
-                        </svg>自动刷新</h3>
-                    <div class="control-item">
-                        <strong>启用状态</strong>
-                        <label class="switch" style="margin-left:auto;">
-                            <input type="checkbox" id="auto-refresh-toggle">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="control-item">
-                        <strong>刷新间隔</strong>
-                        <form id="auto-refresh-form"
-                            style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
-                            <input type="number" id="auto-refresh-interval" min="3"
-                                style="width: 80px; text-align: center;" aria-label="自动刷新间隔秒数">
-                            <span style="color: var(--color-text-secondary); font-size: 0.9rem;">秒</span>
-                        </form>
-                    </div>
-                </div>
                 <div class="control-module control-module--mini" id="appearance-module">
                     <h3><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                             <path
@@ -1523,7 +1507,7 @@
         </section>
     </main>
 
-    <script src="assets/js/log.js?v=20261124a" defer></script>
+    <script src="assets/js/log.js?v=20261124b" defer></script>
 </body>
 
 </html>

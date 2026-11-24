@@ -815,15 +815,12 @@ a.control-item-link:hover {
 }
 
 
-.auto-refresh-form {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.auto-refresh-form input[type="number"] {
-    width: 80px;
-    text-align: center;
+/* 右上角自动刷新下拉：与 #last-updated / #global-refresh-btn 同处 .header-main-actions */
+#page-auto-refresh-select {
+    max-width: 140px;
+    min-height: 40px;
+    padding: 0.4rem 2.2rem 0.4rem 0.75rem;
+    font-size: 0.9rem;
 }
 
 .switch {
@@ -3061,14 +3058,6 @@ dialog.card:hover {
         gap: 0.75rem;
     }
 
-    .auto-refresh-form {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 1rem;
-    }
-
     #manual-alias-form {
         grid-template-columns: 1fr;
     }
@@ -3569,18 +3558,6 @@ dialog.card:hover {
 
     #capacity-form button {
         width: 100%;
-    }
-
-    /* Auto Refresh Module */
-    #auto-refresh-module .control-item {
-        flex-direction: row;
-        /* Keep Refresh Toggle side-by-side if possible */
-        flex-wrap: wrap;
-    }
-
-    #auto-refresh-form {
-        margin-left: auto !important;
-        /* Keep Interval right aligned */
     }
 
     /* Text Wrapping */

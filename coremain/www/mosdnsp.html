@@ -1768,8 +1768,17 @@
                     const sourceId = draggingId || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : '');
                     if (!sourceId || sourceId === moduleId) return;
                     const rect = node.getBoundingClientRect();
-                    // 落点在目标上半区插到前面，下半区插到后面
-                    moveModule(sourceId, moduleId, e.clientY < rect.top + rect.height / 2);
+                    // 落点在目标「前侧」插到前面，否则插到后面。
+                    // 容器是 auto-fit 横向多列，列数随视口变化，不硬编码列数：
+                    // 先用两卡片的 rect.top 判断是否同一行（差 < 高度的一半），
+                    // 同一行按水平轴比较 clientX，不同行按垂直轴比较 clientY。
+                    const sourceNode = moduleGridNodes().find(n => n.dataset.module === sourceId);
+                    const sourceRect = sourceNode ? sourceNode.getBoundingClientRect() : null;
+                    const sameRow = !!sourceRect && Math.abs(sourceRect.top - rect.top) < rect.height / 2;
+                    const placeBefore = sameRow
+                        ? e.clientX < rect.left + rect.width / 2
+                        : e.clientY < rect.top + rect.height / 2;
+                    moveModule(sourceId, moduleId, placeBefore);
                 });
             });
         }

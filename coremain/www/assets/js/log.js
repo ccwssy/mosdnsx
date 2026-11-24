@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
         overviewChartModeToggle: document.getElementById('overview-chart-mode-toggle'),
         independentChartPanel: document.getElementById('independent-chart-panel'),
         bigSparklineMerged: document.getElementById('big-sparkline-merged'), lastUpdated: document.getElementById('last-updated'),
-        autoRefreshToggle: document.getElementById('auto-refresh-toggle'), autoRefreshIntervalInput: document.getElementById('auto-refresh-interval'), autoRefreshForm: document.getElementById('auto-refresh-form'),
+        autoRefreshSelect: document.getElementById('page-auto-refresh-select'),
         totalQueries: document.getElementById('total-queries'), avgDuration: document.getElementById('avg-duration'),
         totalQueriesChange: document.getElementById('total-queries-change'), avgDurationChange: document.getElementById('avg-duration-change'),
         sparklineTotal: document.getElementById('sparkline-total'), sparklineAvg: document.getElementById('sparkline-avg'),
@@ -1557,8 +1557,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // 已知 id 按存档顺序排前，缺失的按默认顺序补末尾；未知 id（后端新增模块）排到数组末尾但不报错
         normalize(saved) {
             const order = [];
-            DEFAULT_LOG_MODULE_LAYOUT.forEach(id => {
-                if (Array.isArray(saved) && saved.includes(id) && !order.includes(id)) order.push(id);
+            // 先按存档顺序收有效项（顺序信息只在 saved 里，必须先遍历它）
+            (Array.isArray(saved) ? saved : []).forEach(id => {
+                if (typeof id === 'string' && DEFAULT_LOG_MODULE_LAYOUT.includes(id) && !order.includes(id)) order.push(id);
             });
             DEFAULT_LOG_MODULE_LAYOUT.forEach(id => { if (!order.includes(id)) order.push(id); });
             if (Array.isArray(saved)) {
@@ -2155,10 +2156,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return tooltipHTML;
     }
 
+    // 右上角下拉的固定档位（秒）；0 = 不刷新
+    const AUTO_REFRESH_PRESETS = [0, 5, 10, 15, 30, 60];
     const autoRefreshManager = {
         start() { this.stop(); if (state.autoRefresh.enabled && state.autoRefresh.intervalSeconds >= 5) { state.autoRefresh.intervalId = setInterval(() => updatePageData(false), state.autoRefresh.intervalSeconds * 1000); } },
         stop() { clearInterval(state.autoRefresh.intervalId); state.autoRefresh.intervalId = null; },
         updateSettings(enabled, seconds) { state.autoRefresh.enabled = enabled; state.autoRefresh.intervalSeconds = Math.max(seconds, 5); localStorage.setItem('mosdnsAutoRefresh', JSON.stringify({ enabled, intervalSeconds: state.autoRefresh.intervalSeconds })); ui.showToast(`自动刷新已${enabled ? `开启, 频率: ${state.autoRefresh.intervalSeconds}秒` : '关闭'}`, 'success'); this.start(); },
+        // 任意秒数映射到最近的固定档位；关闭态一律落到 0
+        presetFor(enabled, seconds) {
+            if (!enabled) return 0;
+            return AUTO_REFRESH_PRESETS.reduce((best, cur) =>
+                Math.abs(cur - seconds) < Math.abs(best - seconds) ? cur : best, AUTO_REFRESH_PRESETS[1]);
+        },
         loadSettings() {
             const saved = JSON.parse(localStorage.getItem('mosdnsAutoRefresh'));
             if (saved) {
@@ -2168,9 +2177,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.autoRefresh.enabled = false;
                 state.autoRefresh.intervalSeconds = CONSTANTS.DEFAULT_AUTO_REFRESH_INTERVAL;
             }
-            elements.autoRefreshToggle.checked = state.autoRefresh.enabled;
-            elements.autoRefreshIntervalInput.value = state.autoRefresh.intervalSeconds;
-            elements.autoRefreshIntervalInput.disabled = !state.autoRefresh.enabled;
+            if (elements.autoRefreshSelect) {
+                elements.autoRefreshSelect.value = String(this.presetFor(state.autoRefresh.enabled, state.autoRefresh.intervalSeconds));
+            }
+        },
+        // 下拉是唯一入口：选 0 = 关闭，其余档位顺带开启。
+        // 关闭时保留上次档位，避免再开启被重置到下限 5 秒。
+        applyPreset(value) {
+            const seconds = parseInt(value, 10) || 0;
+            const enabled = seconds >= 5;
+            this.updateSettings(enabled, enabled ? seconds : state.autoRefresh.intervalSeconds);
         }
     };
 
@@ -3565,7 +3581,7 @@ const cacheManager = {
         window.addEventListener('resize', throttle(handleResize, 100), { passive: true });
         elements.globalRefreshBtn?.addEventListener('click', () => updatePageData(true));
         setInterval(updateLastUpdated, 5000);
-        [elements.autoRefreshToggle, elements.autoRefreshIntervalInput].forEach(el => el && el.addEventListener('change', () => { const enabled = elements.autoRefreshToggle.checked; elements.autoRefreshIntervalInput.disabled = !enabled; autoRefreshManager.updateSettings(enabled, parseInt(elements.autoRefreshIntervalInput.value, 10) || 15); }));
+        elements.autoRefreshSelect?.addEventListener('change', (e) => autoRefreshManager.applyPreset(e.target.value));
         document.addEventListener('visibilitychange', () => document.hidden ? autoRefreshManager.stop() : autoRefreshManager.start());
 
         elements.toggleAuditBtn?.addEventListener('click', async (e) => {
@@ -4072,10 +4088,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1l9.5 5.5v11L12 23l-9.5-5.5v-11L12 1zm0 2.31L4.5 7.65v8.7l7.5 4.34 7.5-4.34V7.65L12 3.31z"/></svg>
                 <span>系统信息</span>
             </button>
-            <button class="system-sub-nav-btn" data-category="advanced" role="tab">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
-                <span>高级设置</span>
-            </button>
         `;
         systemTab.insertBefore(subNav, grid);
 
@@ -4090,7 +4102,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const id = mod.id;
 
             // 按 ID 分配类别
-            if (id === 'auto-refresh-module' || id === 'appearance-module') {
+            if (id === 'appearance-module') {
                 mod.dataset.category = 'basic';
             } else if (id === 'system-info-module' || id === 'update-module') {
                 mod.dataset.category = 'system';
@@ -4100,8 +4112,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 // 前4个 mini 模块（审计、日志容量、自动刷新、外观）属于基础设置
                 mod.dataset.category = 'basic';
             } else {
-                // 未分类的模块默认放入高级设置
-                mod.dataset.category = 'advanced';
+                // 「高级设置」页签已无成员并移除：未分类模块落到默认可见的「基础设置」，不再产生无页签可达的分类
+                mod.dataset.category = 'basic';
             }
         });
 
@@ -4111,7 +4123,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (mod.dataset.category) return; // 已分类跳过
 
                 const id = mod.id;
-                if (id === 'auto-refresh-module' || id === 'appearance-module') {
+                if (id === 'appearance-module') {
                     mod.dataset.category = 'basic';
                 } else if (id === 'system-info-module' || id === 'update-module') {
                     mod.dataset.category = 'system';
@@ -4120,7 +4132,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else if (mod.classList.contains('control-module--mini')) {
                     mod.dataset.category = 'basic';
                 } else {
-                    mod.dataset.category = 'advanced';
+                    // 「高级设置」页签已移除，兜底落到默认可见的「基础设置」
+                    mod.dataset.category = 'basic';
                 }
             });
         }
@@ -4176,7 +4189,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (node.nodeType === 1 && node.classList && node.classList.contains('control-module')) {
                         // 给新模块分类
                         if (!node.dataset.category) {
-                            node.dataset.category = 'advanced'; // 默认高级设置
+                            node.dataset.category = 'basic'; // 默认基础设置（「高级设置」页签已移除）
                         }
                         // 根据当前选中的分类决定是否显示
                         var activeBtn = subNav.querySelector('.system-sub-nav-btn.active');

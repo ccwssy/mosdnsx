@@ -29,11 +29,15 @@ import (
 )
 
 const (
-	githubOwner          = "ccwssy"
-	githubRepo           = "mosdnsx"
-	releaseTag           = "v5-ph-srs"
-	githubReleaseAPI     = "https://api.github.com/repos/%s/%s/releases/tags/%s"
-	githubLatestAPI      = "https://api.github.com/repos/%s/%s/releases/latest"
+	githubOwner     = "ccwssy"
+	githubRepo      = "mosdnsx"
+	githubLatestAPI = "https://api.github.com/repos/%s/%s/releases/latest"
+	// selfBuiltPrefix 是自建发布体系的版本串前缀（VERSION 形如 v5.3.4-mosdnsx3，
+	// 构建产物形如 v5.3.4-mosdnsx3-20261124-abc1234）。上游 tag 字符串格式与之不同，
+	// 因此更新判定改为「前缀保护」而不是纯字符串比较。
+	selfBuiltPrefix = "v5.3.4-mosdnsx"
+	// selfBuiltMarker 用于 VERSION 基线抬升后仍能识别自建构建
+	selfBuiltMarker      = "-mosdnsx"
 	githubReleasePage    = "https://github.com/%s/%s/releases/tag/%s"
 	githubExpandedAssets = "https://github.com/%s/%s/releases/expanded_assets/%s"
 	defaultCacheTTL      = 15 * time.Minute
@@ -326,7 +330,9 @@ func (m *UpdateManager) CheckForUpdate(ctx context.Context, force bool) (UpdateS
 
 	tag := rel.tagName
 	if tag == "" {
-		tag = releaseTag
+		// 取源已改为「latest release」，取不到 tag 时不再回落到硬编码常量，
+		// 直接以当前版本占位，避免把上游 tag 串当成"新版"
+		tag = m.currentVersion
 	}
 	status := UpdateStatus{
 		CurrentVersion:   m.currentVersion,
@@ -391,6 +397,16 @@ func (m *UpdateManager) CheckForUpdate(ctx context.Context, force bool) (UpdateS
 	}
 
 	status.UpdateAvailable = m.isUpdateNeeded(status.LatestVersion, status.AssetSignature)
+
+	// 「已是最新」文案按独立语义计算：只要能力判定为无更新就解释为什么，
+	// 不复用 UpdateAvailable 的布尔值去构造别的结论（否则边界一改，同版也报"发现新版"）。
+	if !status.UpdateAvailable && status.Message == "" {
+		if selfBuiltProtectionActive(m.currentVersion, status.LatestVersion) {
+			status.Message = "当前为自建版本，上游发布不作为可用更新来源（已跳过，不会覆盖自研能力）。"
+		} else {
+			status.Message = "当前已是最新版本"
+		}
+	}
 
 	m.mu.Lock()
 	m.lastStatus = &status
@@ -585,8 +601,8 @@ func (m *UpdateManager) isUpdateNeeded(latest, signature string) bool {
 }
 
 // extractBuildSHA 抽取自建版本串尾部的 7 位 git 短 SHA（如
-// v5.3.4-mosdnsx1-20261104-7594047 或 tag v5-ph-srs-20261104-7594047）。
-// 分支版本号格式与 tag 格式不同，但同一提交的 SHA 一致，比对 SHA 才准确。
+// v5.3.4-mosdnsx1-20261104-7594047）。
+// 不同发布线的版本号格式可能不同，但同一提交的 SHA 一致，比对 SHA 才准确。
 func extractBuildSHA(v string) string {
 	if m := regexp.MustCompile(`-([0-9a-fA-F]{7})$`).FindStringSubmatch(strings.TrimSpace(v)); len(m) == 2 {
 		return strings.ToLower(m[1])
@@ -594,14 +610,34 @@ func extractBuildSHA(v string) string {
 	return ""
 }
 
+// isSelfBuiltVersion 判断版本串是否属于自建发布体系。
+func isSelfBuiltVersion(v string) bool {
+	s := strings.ToLower(strings.TrimSpace(v))
+	if s == "" {
+		return false
+	}
+	return strings.HasPrefix(s, selfBuiltPrefix) || strings.Contains(s, selfBuiltMarker)
+}
+
+// selfBuiltProtectionActive 表示「当前是自建构建，而上游 latest 不是自建串」。
+// 该状态下上游 release 只会把自研能力覆盖掉，一律视为无可用更新。
+func selfBuiltProtectionActive(current, latest string) bool {
+	return isSelfBuiltVersion(current) && !isSelfBuiltVersion(latest)
+}
+
 func (m *UpdateManager) updateAvailableLocked(latest, signature string) bool {
+	// 自建版本串前缀保护：自建构建 + 非自建 latest → 永远不认为有更新。
+	// 这一条必须排在所有字符串/SHA 比较之前，否则格式差异会让上游 release 永远"可更新"。
+	if selfBuiltProtectionActive(m.currentVersion, latest) {
+		return false
+	}
 	latestNorm := normalizeVersion(latest)
 	currentNorm := normalizeVersion(m.currentVersion)
 	if latestNorm != "" && currentNorm != "" && latestNorm == currentNorm {
 		return false
 	}
 	// 自建发布体系：current 与 latest 同提交（SHA 相同）即视为最新，
-	// 避免「v5.3.4-mosdnsx1-…」与「v5-ph-srs-…」格式差异永远误报有更新。
+	// 避免不同版本串格式之间的差异永远误报有更新。
 	if curSHA, latestSHA := extractBuildSHA(m.currentVersion), extractBuildSHA(latest); curSHA != "" && latestSHA != "" && curSHA == latestSHA {
 		return false
 	}
@@ -639,52 +675,6 @@ func (m *UpdateManager) fetchLatestReleaseInfo(ctx context.Context) (releaseInfo
 		return info, nil
 	}
 	return m.fetchLatestReleaseInfoHTML(ctx)
-}
-
-// NOTE: This is the duplicated function from the original file, preserved as requested.
-func (m *UpdateManager) fetchReleaseInfoAPI(ctx context.Context) (releaseInfo, error) {
-	url := fmt.Sprintf(githubReleaseAPI, githubOwner, githubRepo, releaseTag)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return releaseInfo{}, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", userAgent)
-	if token := os.Getenv("MOSDNS_GITHUB_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	} else if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	resp, err := m.doRequestWithFallback(req) // <<< MODIFIED
-	if err != nil {
-		return releaseInfo{}, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusForbidden {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return releaseInfo{}, fmt.Errorf("GitHub API 访问受限: %s (%s)", resp.Status, strings.TrimSpace(string(body)))
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return releaseInfo{}, fmt.Errorf("GitHub API 请求失败: %s (%s)", resp.Status, strings.TrimSpace(string(body)))
-	}
-
-	var payload struct {
-		TagName     string        `json:"tag_name"`
-		PublishedAt *time.Time    `json:"published_at"`
-		Assets      []githubAsset `json:"assets"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return releaseInfo{}, err
-	}
-
-	tag := payload.TagName
-	if tag == "" {
-		tag = releaseTag
-	}
-	return releaseInfo{tagName: tag, publishedAt: payload.PublishedAt, assets: payload.Assets}, nil
 }
 
 func (m *UpdateManager) fetchLatestReleaseInfoAPI(ctx context.Context) (releaseInfo, error) {
@@ -764,29 +754,6 @@ func (m *UpdateManager) fetchLatestReleaseInfoHTML(ctx context.Context) (release
 		return releaseInfo{}, errors.New("未在最新发布页面解析到资产")
 	}
 	return releaseInfo{tagName: tag, publishedAt: publishedAt, assets: assets}, nil
-}
-
-// NOTE: This is the duplicated function from the original file, preserved as requested.
-func (m *UpdateManager) fetchReleaseInfoHTML(ctx context.Context) (releaseInfo, error) {
-	assetsURL := fmt.Sprintf(githubExpandedAssets, githubOwner, githubRepo, releaseTag)
-	body, err := m.fetchHTML(ctx, assetsURL)
-	if err != nil {
-		return releaseInfo{}, err
-	}
-
-	assets := parseAssetsFromHTML(body)
-	if len(assets) == 0 {
-		return releaseInfo{}, errors.New("未在发布页面解析到资产")
-	}
-
-	var publishedAt *time.Time
-	if match := relativeTimeRegex.FindStringSubmatch(body); len(match) == 2 {
-		if t, err := time.Parse(time.RFC3339, match[1]); err == nil {
-			publishedAt = &t
-		}
-	}
-
-	return releaseInfo{publishedAt: publishedAt, assets: assets}, nil
 }
 
 func (m *UpdateManager) fetchHTML(ctx context.Context, url string) (string, error) {
