@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "switches": {
+    "switch3": {"values": ["A", "B"], "desc": "核心模式 A/B"},
+    "switch4": {"values": ["A", "B"], "desc": "备用开关 4"}
+  }
+}
