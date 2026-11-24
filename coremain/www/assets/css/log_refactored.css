@@ -10,9 +10,24 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
     --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 10px 30px -5px rgba(0, 0, 0, 0.1), 0 8px 16px -8px rgba(0, 0, 0, 0.06);
-    --transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-med: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-slow: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    /* 令牌只承载时长与缓动，属性一律在调用处显式写出（DESIGN.md 禁止通配过渡）。
+       全部 ≤200ms，进入缓动用 ease-out。 */
+    --transition-fast: 0.15s ease-out;
+    --transition-med: 0.18s ease-out;
+    --transition-slow: 0.2s ease-out;
+
+    /* 首页 themeMap 翻译层落点（由 log.js 的 homeAppearance 内联覆盖）：
+       --gradient-*  首页 --gradient-start/mid/end，接到顶部渐变条与统计卡渐变
+       --control-*   首页 --control-*，接到 select / input / .button */
+    --gradient-start: #4a90e2;
+    --gradient-mid: #2e86de;
+    --gradient-end: #4a90e2;
+    --control-bg: #f0f4f7;
+    --control-border: #d5dce2;
+    --control-text: #5e727e;
+    --control-hover-bg: #e5edf3;
+    --control-active-bg: #4a90e2;
+    --control-active-text: #ffffff;
 }
 
 /* 主题色系统 */
@@ -177,7 +192,19 @@ body::before {
     background: linear-gradient(180deg, var(--glow-color) 0%, transparent 100%);
     z-index: 0;
     pointer-events: none;
-    transition: var(--transition-slow);
+}
+
+/* 页面顶部渐变条：消费首页 --gradient-start/mid/end（静态渐变，不参与循环动画） */
+body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-image: linear-gradient(to right, var(--gradient-start), var(--gradient-mid), var(--gradient-end));
+    z-index: 10;
+    pointer-events: none;
 }
 
 .container {
@@ -236,7 +263,7 @@ a {
     color: var(--color-accent-primary);
     text-decoration: none;
     font-weight: 600;
-    transition: var(--transition-fast);
+    transition: color var(--transition-fast);
 }
 
 a:hover {
@@ -245,6 +272,27 @@ a:hover {
 
 .text-right {
     text-align: right;
+}
+
+/* 数字列一律等宽数字：耗时 ms、计数、时间戳、百分比都对得上位，刷新时不左右跳（DESIGN.md 数据规范）。
+   覆盖表格右对齐列 + 显式 .numeric + 各类统计/图例/时间戳元素。 */
+td.text-right,
+th.text-right,
+.table-num,
+.duration-cell,
+.legend-value,
+.donut-chart-center-text .total,
+.stat-card-value,
+.metric-value,
+#last-updated,
+.summary-item strong,
+.stat-change,
+td .tag-count,
+.upstream-stats-table td,
+.log-timestamp,
+.log-duration {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
 }
 
 /* 居中辅助类，供“耗时”列使用 */
@@ -306,9 +354,11 @@ a:hover {
     border-radius: var(--border-radius-sm);
     background: var(--color-accent-primary);
     box-shadow: var(--shadow-md);
-    transition: all var(--transition-med);
+    /* width 由 updateNavSlider 直接写入（瞬时），只有 transform 参与过渡：
+       width 是布局属性，过渡它会每帧触发重排。 */
+    transition: transform var(--transition-med);
     z-index: 0;
-    will-change: transform, width;
+    will-change: transform;
 }
 
 .main-nav a {
@@ -346,7 +396,7 @@ a:hover {
     border-radius: 50%;
     background-color: currentColor;
     opacity: 0.6;
-    transition: all var(--transition-med);
+    transition: opacity 0.18s ease-out, background-color 0.18s ease-out;
 }
 
 .main-nav a.active .status-indicator {
@@ -387,7 +437,7 @@ a:hover {
     color: var(--color-text-secondary);
     border: 1px solid var(--color-border);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: color 0.15s ease-out, background-color 0.15s ease-out, border-color 0.15s ease-out;
     flex-shrink: 0;
 }
 
@@ -446,7 +496,7 @@ a:hover {
 }
 
 .stat-card.theme-gradient {
-    background: linear-gradient(135deg, var(--color-accent-primary) 0%, var(--color-accent-secondary) 100%);
+    background: linear-gradient(135deg, var(--gradient-start) 0%, var(--gradient-mid) 55%, var(--gradient-end) 100%);
 }
 
 .stat-card:hover {
@@ -625,7 +675,7 @@ a:hover {
     margin-left: auto;
 }
 
-/* Universal Form Inputs */
+/* Universal Form Inputs — 底色/边框/文字取 --control-*（首页 themeMap 翻译层），聚焦取 --control-active-bg */
 input[type="text"],
 input[type="number"],
 input[type="email"],
@@ -636,10 +686,10 @@ select,
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    background-color: var(--color-bg-alt);
-    border: 1px solid var(--color-border);
+    background-color: var(--control-bg);
+    border: 1px solid var(--control-border);
     border-radius: var(--border-radius-md);
-    color: var(--color-text-primary);
+    color: var(--control-text);
     padding: 0.5rem 0.75rem;
     font-size: 0.95rem;
     font-family: inherit;
@@ -662,12 +712,24 @@ select {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23c9d1d9' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
 }
 
+/* 焦点可见：不裸删 outline，只在支持 :focus-visible 的浏览器上交给它接管 */
 input:focus,
 select:focus {
     outline: none;
-    border-color: var(--color-accent-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    /* Indigo tint */
+    border-color: var(--control-active-bg);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--control-active-bg) 25%, transparent);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--control-active-bg);
+    outline-offset: 2px;
+}
+
+input:hover:not(:disabled):not(:focus),
+select:hover:not(:disabled):not(:focus) {
+    background-color: var(--control-hover-bg);
 }
 
 /* Datetime Icon Styling */
@@ -786,7 +848,7 @@ a.control-item-link:hover {
     right: 0;
     bottom: 0;
     background-color: var(--color-border);
-    transition: var(--transition-fast);
+    transition: background-color var(--transition-fast);
     border-radius: 28px;
 }
 
@@ -798,7 +860,7 @@ a.control-item-link:hover {
     left: 4px;
     bottom: 4px;
     background-color: white;
-    transition: var(--transition-fast);
+    transition: transform var(--transition-fast);
     border-radius: 50%;
 }
 
@@ -821,7 +883,7 @@ input:checked+.slider:before {
     border-radius: 50%;
     cursor: pointer;
     border: 3px solid transparent;
-    transition: var(--transition-fast);
+    transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .color-swatch:hover {
@@ -853,7 +915,7 @@ input:checked+.slider:before {
     cursor: pointer;
     white-space: nowrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    transition: all var(--transition-fast);
+    transition: background-color 0.15s ease-out, border-color 0.15s ease-out, color 0.15s ease-out, box-shadow 0.15s ease-out, transform 0.15s ease-out;
 }
 
 .button:hover:not(:disabled) {
@@ -882,14 +944,15 @@ input:checked+.slider:before {
 }
 
 .button.secondary {
-    background-color: var(--color-bg-card);
-    color: var(--color-text-primary);
-    border-color: var(--color-border);
+    background-color: var(--control-bg);
+    color: var(--control-text);
+    border-color: var(--control-border);
 }
 
 .button.secondary:hover:not(:disabled) {
-    border-color: var(--color-accent-primary);
-    color: var(--color-accent-primary);
+    background-color: var(--control-hover-bg);
+    border-color: var(--control-active-bg);
+    color: var(--control-text);
 }
 
 .button.danger {
@@ -919,11 +982,11 @@ textarea {
     width: 100%;
     padding: 0.8rem 1.2rem;
     font-size: 1rem;
-    background-color: var(--color-bg-alt);
-    border: 1px solid var(--color-border);
+    background-color: var(--control-bg);
+    border: 1px solid var(--control-border);
     border-radius: var(--border-radius-sm);
-    color: var(--color-text-primary);
-    transition: var(--transition-fast);
+    color: var(--control-text);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
     font-family: var(--font-family-sans);
     -webkit-appearance: none;
     -moz-appearance: none;
@@ -960,6 +1023,28 @@ input[type="search"]:focus {
 
 .overview-grid .scrollable-table-container {
     max-height: 350px;
+}
+
+/* /log 概览页模块拖动排版（与首页同一套视觉语言）。
+   拖拽态只动 opacity / transform，drop 目标高亮用 outline —— border 会改变盒模型触发重排。 */
+[data-module][draggable="true"] {
+    cursor: grab;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+[data-module][draggable="true"]:active {
+    cursor: grabbing;
+}
+
+[data-module].dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+    cursor: grabbing;
+}
+
+[data-module].drag-over {
+    outline: 2px dashed var(--color-accent-primary);
+    outline-offset: 2px;
 }
 
 #log-query-table-container {
@@ -1014,7 +1099,7 @@ input[type="search"]:focus {
 #data-view-modal .accordion-collapse {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.25s ease;
+    /* 不再对 max-height 做过渡：那是布局属性，每帧都会触发重排。折叠改为瞬时开合。 */
 }
 
 #data-view-modal .accordion-collapse.show {
@@ -1087,9 +1172,7 @@ thead th {
     z-index: 2;
 }
 
-.scrollable-table-container thead {
-    transition: padding-right 0.2s ease-in-out;
-}
+/* thead 原有一条 padding-right 过渡：没有任何规则真的改 padding-right，属死动画且是布局属性，已删除 */
 
 .domain-response-cell {
     display: flex;
@@ -1184,6 +1267,24 @@ tbody tr.animate-in {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    /* 密集表格靠收窄 + 省略号控制宽度，不靠压缩 letter-spacing 硬凑 */
+    min-width: 0;
+}
+
+/* 两行内截断：用于命中规则/应答这类可能很长的单元格 */
+.clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+/* 域名/规则原文单元格：允许在任意字符处断行，避免长域名撑破表格 */
+td.cell-wrap {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 32ch;
 }
 
 tbody td a.clickable-link {
@@ -1194,17 +1295,19 @@ tbody td a.clickable-link {
 tbody td a.clickable-link::after {
     content: '';
     position: absolute;
-    width: 0;
+    width: 100%;
     height: 1px;
     bottom: -3px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    /* 只用 transform 做下划线生长：width 是布局属性，会触发重排 */
+    transform: scaleX(0);
+    transform-origin: center;
     background-color: var(--color-accent-primary);
-    transition: width var(--transition-fast);
+    transition: transform 0.15s ease-out;
 }
 
 tbody td a.clickable-link:hover::after {
-    width: 100%;
+    transform: scaleX(1);
 }
 
 tbody tr[data-log-index],
@@ -1426,7 +1529,7 @@ tbody tr[data-rule-id] {
     border-radius: 4px;
     display: inline-flex;
     vertical-align: middle;
-    transition: var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .copy-btn:hover,
@@ -1447,7 +1550,7 @@ tbody tr[data-rule-id] {
     z-index: 1000;
     opacity: 0;
     visibility: hidden;
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     transform: translateY(-20px) scale(0.95);
     box-shadow: var(--shadow-lg);
     color: var(--color-accent-text);
@@ -2057,7 +2160,7 @@ dialog.card:hover {
     color: var(--color-text-secondary);
     font-weight: 600;
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .sub-nav-link.active {
@@ -2215,6 +2318,23 @@ dialog.card:hover {
     gap: 0.25rem;
 }
 
+/* 名单管理左侧 nav 的分组小标题：「手动维护」在前、「规则集（自动）」在后，
+   让用户第一眼看到的是可改的小名单（SRS 生成物只读）。 */
+.list-mgmt-group-title {
+    margin: 0.75rem 0 0.25rem;
+    padding: 0 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    opacity: 0.8;
+}
+
+.list-mgmt-group-title:first-child {
+    margin-top: 0;
+}
+
 .list-mgmt-link {
     display: block;
     padding: 0.6rem 1rem;
@@ -2222,7 +2342,7 @@ dialog.card:hover {
     font-weight: 500;
     color: var(--color-text-secondary);
     text-decoration: none;
-    transition: var(--transition-fast);
+    transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
     border: 1px solid transparent;
 }
 
@@ -2301,60 +2421,6 @@ dialog.card:hover {
 
 [data-theme="dark"] .segmented-control .button.active {
     color: #fff !important;
-}
-
-.secondary-switches-grid {
-    display: grid;
-    /* 增大每格最小宽度，减少拥挤与误读 */
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1rem 1.25rem;
-    padding-top: 1.25rem;
-    margin-top: 1.25rem;
-    border-top: 1px solid var(--color-border);
-}
-
-.secondary-switches-grid .control-item {
-    /* 让标题在左、开关在右且顶端对齐 */
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 0.75rem 1rem;
-    background-color: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius-sm);
-}
-
-.secondary-switches-grid .control-item strong {
-    /* 使标题与说明垂直排列，避免与右侧开关混淆 */
-    display: block;
-    flex: 1 1 auto;
-    margin-right: 0.75rem;
-}
-
-.secondary-switches-grid .control-item strong .title-line {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.secondary-switches-grid .control-item .switch-desc {
-    display: block;
-    color: var(--color-text-secondary);
-    font-weight: 400;
-    font-size: 0.85rem;
-    margin-top: 0.25rem;
-    line-height: 1.35;
-    max-width: 38ch;
-}
-
-/* 开关保持靠右并顶端对齐 */
-.secondary-switches-grid .control-item>label.switch {
-    margin-left: auto;
-    align-self: flex-start;
-}
-
-/* 轻微悬浮强调，帮助识别每个独立项 */
-.secondary-switches-grid .control-item:hover {
-    box-shadow: var(--shadow-sm);
 }
 
 .info-icon {
@@ -2900,6 +2966,14 @@ dialog.card:hover {
         padding-bottom: 1rem;
     }
 
+    /* 移动端 nav 是 row + wrap，分组标题单独占一行，避免与链接挤在同一行 */
+    .list-mgmt-group-title {
+        flex-basis: 100%;
+        margin: 0.5rem 0 0;
+        padding: 0;
+        text-align: center;
+    }
+
     .list-mgmt-link {
         flex-grow: 1;
         text-align: center;
@@ -3056,24 +3130,9 @@ dialog.card:hover {
     --color-warning: #f6c177;
 }
 
-@keyframes bg-pan {
-    0% {
-        background-position: 0% 50%;
-    }
-
-    50% {
-        background-position: 100% 50%;
-    }
-
-    100% {
-        background-position: 0% 50%;
-    }
-}
-
+/* 主题背景必须是静态的（DESIGN.md「Don't」）：保留原渐变，去掉全屏 background-position 循环动画 */
 [data-theme="sakura"] body {
     background: linear-gradient(170deg, #191724 0%, #21202e 50%, #393552 100%);
-    background-size: 200% 200%;
-    animation: bg-pan 30s ease infinite;
     background-attachment: fixed;
 }
 
@@ -3109,42 +3168,7 @@ dialog.card:hover {
     background: rgba(235, 111, 146, 0.8);
 }
 
-@keyframes sakura-fall {
-    0% {
-        transform: translateY(110vh) translateX(-10vw) rotate(0deg);
-        opacity: 1;
-    }
-
-    100% {
-        transform: translateY(-10vh) translateX(10vw) rotate(720deg);
-        opacity: 0;
-    }
-}
-
-[data-theme="sakura"] main::before,
-[data-theme="sakura"] main::after {
-    content: '🌸';
-    position: fixed;
-    bottom: -50px;
-    color: #f4abc4;
-    font-size: 1rem;
-    z-index: 0;
-    pointer-events: none;
-    animation: sakura-fall 15s linear infinite;
-    animation-direction: reverse;
-}
-
-[data-theme="sakura"] main::before {
-    left: 10%;
-    animation-delay: 0s;
-}
-
-[data-theme="sakura"] main::after {
-    left: 30%;
-    animation-delay: -5s;
-    content: '💮';
-    font-size: 1.5rem;
-}
+/* 漂浮花瓣伪元素已删除：属「漂浮粒子」类装饰层，DESIGN.md 明确禁止，且是无限循环动画。 */
 
 [data-theme="evergreen"] {
     --color-bg: #1a2e26;
@@ -3201,57 +3225,12 @@ dialog.card:hover {
     --color-warning: #f59e0b;
 }
 
+/* 星空背景保留，去掉 40s 无限 background-position 漂移（全屏背景动画禁止） */
 [data-theme="starlight"] body {
     background: #000 url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800"%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="200" cy="200" r="1"/%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="600" cy="600" r="1.5"/%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="400" cy="500" r="0.5"/%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="100" cy="50" r="0.5"/%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="700" cy="100" r="1"/%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="50" cy="700" r="0.5"/%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="300" cy="50" r="1"/%3E%3Ccircle fill="%23fff" fill-opacity="0.8" cx="550" cy="300" r="2"/%3E%3C/svg%3E');
-    animation: starlight-drift 40s infinite linear;
 }
 
-@keyframes starlight-drift {
-    from {
-        background-position: 0 0;
-    }
-
-    to {
-        background-position: -800px 400px;
-    }
-}
-
-@keyframes twinkle-star {
-
-    0%,
-    100% {
-        opacity: 0.1;
-    }
-
-    50% {
-        opacity: 0.8;
-    }
-}
-
-[data-theme="starlight"] main::after {
-    content: '✧';
-    position: fixed;
-    color: #fff;
-    z-index: 0;
-    pointer-events: none;
-    animation: twinkle-star 5s infinite;
-    top: 20%;
-    left: 10%;
-    font-size: 0.5rem;
-}
-
-[data-theme="starlight"] main::before {
-    content: '✦';
-    position: fixed;
-    color: #fff;
-    z-index: 0;
-    pointer-events: none;
-    animation: twinkle-star 7s infinite;
-    top: 60%;
-    right: 15%;
-    animation-delay: -2s;
-    font-size: 0.8rem;
-}
+/* 两颗闪烁星伪元素已删除：属装饰性漂浮粒子，无限循环动画且不承担任何状态语义。 */
 
 [data-theme="starlight"] .card,
 [data-theme="starlight"] .main-nav,
@@ -3292,24 +3271,9 @@ dialog.card:hover {
     --color-warning: #FFD700;
 }
 
-@keyframes dusk-gradient {
-    0% {
-        background-position: 0% 50%;
-    }
-
-    50% {
-        background-position: 100% 50%;
-    }
-
-    100% {
-        background-position: 0% 50%;
-    }
-}
-
+/* 黄昏渐变保留，去掉 20s 无限 background-position 动画 */
 [data-theme="dusk"] body {
     background: linear-gradient(-45deg, #434343, #232526, #2c3e50, #fd746c);
-    background-size: 400% 400%;
-    animation: dusk-gradient 20s ease infinite;
     background-attachment: fixed;
 }
 
@@ -3553,36 +3517,6 @@ dialog.card:hover {
     }
 }
 
-/* Feature Switches Grid (Tile Layout) */
-.secondary-switches-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-top: 1.25rem;
-}
-
-.secondary-switches-grid .control-item {
-    background-color: var(--color-bg-alt);
-    padding: 0.85rem 1rem;
-    border-radius: var(--border-radius-md);
-    margin-bottom: 0 !important;
-    border: 1px solid transparent;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.secondary-switches-grid .control-item:hover {
-    border-color: var(--color-accent-primary);
-    box-shadow: var(--shadow-sm);
-    transform: translateY(-2px);
-}
-
-.secondary-switches-grid .control-item strong {
-    font-size: 0.95rem;
-}
-
 /* Mobile Optimizations */
 @media (max-width: 768px) {
     .container {
@@ -3649,31 +3583,6 @@ dialog.card:hover {
         /* Keep Interval right aligned */
     }
 
-    /* Feature Switches Compact Grid for Mobile */
-    .secondary-switches-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 0.6rem;
-    }
-
-    .secondary-switches-grid .control-item {
-        padding: 0.75rem;
-        flex-direction: column;
-        align-items: flex-start;
-        justify-content: space-between;
-        min-height: 80px;
-    }
-
-    .secondary-switches-grid .control-item strong {
-        font-size: 0.85rem;
-        line-height: 1.3;
-    }
-
-    .secondary-switches-grid .control-item .switch {
-        align-self: flex-end;
-        margin-left: 0;
-        transform: scale(0.9);
-    }
-
     /* Text Wrapping */
     p,
     h1,
@@ -3682,3 +3591,42 @@ dialog.card:hover {
         overflow-wrap: break-word;
     }
 }
+
+/* ============================================================
+   动效收敛（fixing-motion-performance）
+   - 只保留 4 处无限循环：状态指示灯 pulse-small、两处 spin（加载中）、骨架屏
+   - 全部纳入 prefers-reduced-motion 关停；离屏暂停由 log.js 的 setupOffscreenAnimationPause()
+     用 IntersectionObserver 打 .anim-paused（animation-play-state: paused）
+   ============================================================ */
+.anim-paused {
+    animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* 循环动画一律静态化 */
+    .main-nav a .status-indicator.running,
+    .refresh-btn[aria-busy="true"] svg,
+    #initial-loader,
+    .skeleton {
+        animation: none !important;
+    }
+
+    /* 悬停位移与缩放全部取消 */
+    .button:hover:not(:disabled),
+    .stat-card:hover,
+    tbody tr:hover,
+    .color-swatch:hover {
+        transform: none !important;
+    }
+}
+

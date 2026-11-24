@@ -745,6 +745,31 @@ type V2GetLogsParams struct {
 	DomainSetExclude string
 }
 
+// isBlockedLog 按 AdGuardHome 口径判定一条审计记录是否属于「被拦截」：
+//   - reject 3 路径：response_code == NXDOMAIN
+//   - adguard null_ip 路径：rcode 仍为 NOERROR，但应答 A/AAAA 被改写成 0.0.0.0 / ::
+//
+// 只按应答特征判定，不依赖 DomainSet 取值 —— 拦截来源可能是 sd_ads、adguard 或未来新增规则集。
+// 这是全仓唯一的拦截判定真源，统计与排行都必须复用它，不许各写一份。
+// 调用方必须已持有 c.mu 的读锁：本函数内部不再加锁，避免与持有者自锁。
+func (c *AuditCollector) isBlockedLog(l *AuditLog) bool {
+	if l == nil {
+		return false
+	}
+	if strings.EqualFold(l.ResponseCode, "NXDOMAIN") {
+		return true
+	}
+	for _, a := range l.Answers {
+		if a.Type != "A" && a.Type != "AAAA" {
+			continue
+		}
+		if s := strings.TrimSpace(a.Data); s == "0.0.0.0" || s == "::" {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *AuditCollector) CalculateV2Stats() V2StatsResponse {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -755,12 +780,14 @@ func (c *AuditCollector) CalculateV2Stats() V2StatsResponse {
 		avgDuration = c.totalQueryDuration / float64(totalQueryCount)
 	}
 
-	// 被拦截查询数：环形缓冲中命中 adguard 规则集的记录条数。
+	// 被拦截查询数：环形缓冲中按应答特征判定为拦截的记录条数
+	// （NXDOMAIN，或 NOERROR 但 A/AAAA 被改写成 0.0.0.0 / ::，判定口径见 isBlockedLog）。
+	// 判定不看 DomainSet，因此 sd_ads / adguard / 未来新增规则集的拦截都会被统计到。
 	// c.logs 未写满时是前缀填充，写满后靠 c.head 回绕，两种状态下下标 0..len(c.logs)-1
 	// 恰好覆盖全部有效元素且不重复，head 只影响顺序、不影响集合。
 	var blockedQueries uint64
 	for i := 0; i < len(c.logs); i++ {
-		if c.logs[i].DomainSet == "adguard" {
+		if c.isBlockedLog(&c.logs[i]) {
 			blockedQueries++
 		}
 	}
@@ -874,6 +901,41 @@ func (c *AuditCollector) CalculateRankFiltered(rankType RankType, domainSet stri
 	for i := 0; i < len(c.logs); i++ {
 		log := c.logs[i]
 		if log.DomainSet != domainSet {
+			continue
+		}
+
+		var key string
+		switch rankType {
+		case RankByDomain:
+			key = log.QueryName
+		case RankByClient:
+			key = log.ClientIP
+		case RankByDomainSet:
+			key = log.DomainSet
+		default:
+			return []V2RankItem{}
+		}
+		counts[key]++
+	}
+
+	return c.getRankFromMap(counts, limit)
+}
+
+// CalculateRankBlocked 只在「被拦截」的记录里统计排行（判定口径见 isBlockedLog）。
+//
+// 它与 CalculateRankFiltered 的 domainSet 语义不同：domainSet 是「按规则集过滤」，
+// 本函数是「按应答特征只看拦截」，因此不复用也不修改 domainSet 分支。
+// 环形缓冲遍历语义与 CalculateRankFiltered 一致：len(c.logs) < cap 时是前缀填充，
+// 写满后靠 c.head 回绕，两种状态下下标 0..len(c.logs)-1 恰好覆盖全部有效元素，
+// head 只决定时间顺序，聚合到 map 时无需考虑。
+func (c *AuditCollector) CalculateRankBlocked(rankType RankType, limit int) []V2RankItem {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	counts := make(map[string]int)
+	for i := 0; i < len(c.logs); i++ {
+		log := &c.logs[i]
+		if !c.isBlockedLog(log) {
 			continue
 		}
 

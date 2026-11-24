@@ -9,8 +9,11 @@ package coremain
 //   [{"tag":"...","name":"my_whitelist.txt","type":"domain_set","kind":"text",
 //     "files":["..."],"editable":true,"entry_count":28}]
 //
-// editable 表示该类型支持在线编辑：文本类走 /show + /post，
+// editable 表示该名单支持在线编辑：文本类走 /show + /post，
 // sd_set / si_set 走数据源管理接口（/config、/update）。
+// 注意 editable 同时受 tag 约束：readOnlyListTags 里的 SRS 生成物
+// （geosite_cn / geosite_gfw / si_cn / si_private）一律为 false，
+// 它们的文件内容由 auto_update.sh 生成，手工改动会被覆盖。
 
 import (
 	"encoding/json"
@@ -66,6 +69,18 @@ var editableListTypes = map[string]bool{
 	"hosts":            true,
 	"sd_set":           true,
 	"si_set":           true,
+}
+
+// readOnlyListTags 是 SRS 生成物对应的 tag 集合（单一真源）。
+// 这些名单由 auto_update.sh 从订阅源生成到 data/ 下，手工改动会被下次自动更新覆盖，
+// 因此一律置为只读：面板显示「由数据源自动生成，修改请到数据源管理」，
+// 编辑入口走「数据源管理」而不是名单文本编辑器。
+// 新增此类生成物时只改这一处，前端不再维护第二份只读名单。
+var readOnlyListTags = map[string]bool{
+	"geosite_cn":  true,
+	"geosite_gfw": true,
+	"si_cn":       true,
+	"si_private":  true,
 }
 
 // listDisplayNames 把已知名单的 tag 映射成中文友好名（面板 nav 直接展示这个字段）。
@@ -133,12 +148,13 @@ func collectListPlugins() []ListPluginInfo {
 		if sourceFileTypes[p.Type] {
 			files = extractSourceFiles(p.Args)
 		}
+		// Editable 先按插件类型判定，再被 readOnlyListTags 覆盖：SRS 生成物一律只读。
 		info := ListPluginInfo{
 			Tag:      p.Tag,
 			Type:     p.Type,
 			Kind:     listKinds[p.Type],
 			Files:    files,
-			Editable: editableListTypes[p.Type],
+			Editable: editableListTypes[p.Type] && !readOnlyListTags[p.Tag],
 			// sd_set / si_set 的数据源由用户在「名单管理」里维护，始终算自建名单。
 			Managed: sourceFileTypes[p.Type],
 			Name:    p.Tag,

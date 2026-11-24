@@ -56,8 +56,8 @@
         .header h1 { font-size: 1.7rem; color: var(--text-color); margin: 0; font-weight: 700; letter-spacing: -0.03em; }
         .header .header-gradient-bar { width: 80px; height: 4px; margin: 0.5rem auto 0.8rem auto; border-radius: var(--radius-bar); background-image: linear-gradient(to right, var(--gradient-start), var(--gradient-mid), var(--gradient-end)); }
         
-        .card-title-gradient-bar { width: 100%; height: 3px; border-radius: var(--radius-bar); background-color: var(--accent-color); background-image: linear-gradient(to right, var(--gradient-start), var(--gradient-mid), var(--gradient-end), var(--gradient-start)); background-size: 200% auto; animation: gradient-scroll 6s linear infinite; transition: all 0.4s ease; max-width: 100%; margin: 0.5rem 0 1rem 0; }
-        @keyframes gradient-scroll { 100% { background-position: 100% 0%; } }
+                /* 卡片标题渐变条：去掉 6s 无限 background-position 扫描（全屏/长条背景动画禁止），保留原渐变配色 */
+        .card-title-gradient-bar { width: 100%; height: 3px; border-radius: var(--radius-bar); background-color: var(--accent-color); background-image: linear-gradient(to right, var(--gradient-start), var(--gradient-mid), var(--gradient-end), var(--gradient-start)); max-width: 100%; margin: 0.5rem 0 1rem 0; }
         
         .main-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.2rem; width: 100%; max-width: 1800px; flex-grow: 1; margin-bottom: 1.2rem; justify-content: center; }
         .card { background-color: var(--card-bg); border-radius: var(--radius-main); box-shadow: var(--card-shadow); padding: 1.2rem; display: none; flex-direction: column; transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease; border: 1px solid var(--border-color); }
@@ -171,7 +171,7 @@
             font-weight: 500; /* Consistent font weight */
             color: var(--control-text);
             text-align: center;
-            transition: all 0.2s ease;
+            transition: color 0.15s ease-out, background-color 0.15s ease-out, border-color 0.15s ease-out;
             box-sizing: border-box; /* Include padding and border in height calculation */
             height: 38px; /* Match button height approximately */
             display: flex; /* Use flex for vertical centering of text */
@@ -212,7 +212,7 @@
         .generic-switch-input:checked + .generic-switch-slider:before { transform: translateX(19px); }
         .rule-actions-group { display: flex; flex-direction: column; gap: 0.8rem; }
         .button-group-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
-        .button-group-inline button, .rule-actions-group > button { padding: 0.8rem; font-size: 0.95rem; font-weight: 500; border-radius: var(--radius-control); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s ease; }
+        .button-group-inline button, .rule-actions-group > button { padding: 0.8rem; font-size: 0.95rem; font-weight: 500; border-radius: var(--radius-control); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: background-color 0.15s ease-out, border-color 0.15s ease-out, color 0.15s ease-out, box-shadow 0.15s ease-out, transform 0.15s ease-out; }
         .button-group-inline button { background-color: var(--control-bg); color: var(--control-text); border: 1px solid var(--control-border); }
         .button-group-inline button:hover { background-color: var(--control-hover-bg); border-color: var(--accent-color); transform: translateY(-2px); }
         button.danger { background-color: var(--danger-bg-color); border: 1px solid var(--danger-border-color); color: var(--danger-text-color); }
@@ -223,7 +223,7 @@
         .info-panel-tabs { display: flex; border-bottom: 1px solid var(--border-color); }
         .tab-button { background: none; border: none; padding: 0.8rem 1rem; cursor: pointer; color: var(--label-color); font-weight: 500; font-size: 1rem; position: relative; transition: color 0.2s ease; flex-shrink: 0; white-space: nowrap; }
         .tab-button.active { color: var(--accent-color); }
-        .tab-button::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 3px; background-color: var(--accent-color); opacity: 0; transform: scaleX(0.5); transition: all 0.3s ease; }
+        .tab-button::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 3px; background-color: var(--accent-color); opacity: 0; transform: scaleX(0.5); transition: opacity 0.15s ease-out, transform 0.15s ease-out; }
         .tab-button.active::after { opacity: 1; transform: scaleX(1); }
         .tab-content { display: none; flex-direction: column; gap: 1rem; height: 100%; flex-grow: 1; }
         .tab-content.active { display: flex; }
@@ -242,10 +242,10 @@
         .control-base-label:hover { border-color: var(--accent-color); }
         .theme-selector .control-base-label { justify-content: center; font-size: 0.9rem; }
         .control-base-label.active { background-color: var(--control-active-bg); color: var(--control-active-text); border-color: var(--accent-color); box-shadow: 0 3px 8px -2px var(--accent-color); font-weight: 600; }
-        .card-toggle-group input[type="checkbox"] { appearance: none; width: 18px; height: 18px; border: 2px solid var(--control-border); border-radius: 4px; background-color: var(--card-bg); position: relative; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0; margin: 0; }
+        .card-toggle-group input[type="checkbox"] { appearance: none; width: 18px; height: 18px; border: 2px solid var(--control-border); border-radius: 4px; background-color: var(--card-bg); position: relative; cursor: pointer; transition: background-color 0.15s ease-out, border-color 0.15s ease-out; flex-shrink: 0; margin: 0; }
         .card-toggle-group input[type="checkbox"]:checked { background-color: var(--accent-color); border-color: var(--accent-color); }
         .card-toggle-group input[type="checkbox"]:checked::after { content: '\2713'; display: block; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 14px; color: white; }
-        footer { width: 100%; max-width: 1200px; text-align: center; margin-top: 1.2rem; padding-top: 1.2rem; border-top: 1px solid var(--border-color); font-size: 0.9rem; color: var(--label-color); transition: all 0.4s ease; }
+        footer { width: 100%; max-width: 1200px; text-align: center; margin-top: 1.2rem; padding-top: 1.2rem; border-top: 1px solid var(--border-color); font-size: 0.9rem; color: var(--label-color); transition: color 0.2s ease-out, border-color 0.2s ease-out; }
         .footer-content { display: flex; justify-content: center; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
         .footer-item { display: flex; align-items: center; gap: 0.6rem; }
         .footer-icon { color: var(--accent-color); opacity: 0.8; font-size: 1.1em; }
@@ -387,15 +387,16 @@
         .accordion-header.active::after {
             transform: rotate(-180deg);
         }
+        /* 折叠面板不再过渡 max-height/padding：两者都是布局属性，每帧触发重排。
+           开合改为 display 切换（JS 只切 .active 类）。 */
         .accordion-panel {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            display: none;
             background-color: var(--card-bg);
             padding: 0 1.2rem;
         }
         .accordion-panel.active {
-             padding: 1.2rem;
+            display: block;
+            padding: 1.2rem;
         }
         .accordion-panel .metadata-table {
             margin-bottom: 1.2rem;
@@ -644,7 +645,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            transition: all 0.2s ease;
+            transition: background-color 0.15s ease-out, border-color 0.15s ease-out, color 0.15s ease-out;
         }
         #toggle-false-btn:hover {
             border-color: var(--log-accent-color);
@@ -729,6 +730,49 @@
             /* Re-checked and confirmed that existing rules correctly point to --log- vars within this section. */
             /* So no specific mobile overrides are needed here for colors, as they're already fixed. */
         }
+
+        /* ============================================================
+           动效收敛（fixing-motion-performance）
+           - 首页唯一保留的循环动画是 #loading-spinner（加载中反馈），
+             由下面的 prefers-reduced-motion 关停，并在离屏时由 .anim-paused 暂停。
+           ============================================================ */
+        .anim-paused { animation-play-state: paused !important; }
+
+        /* 玻璃拟态 glass 的 extraStyles 里原本写了一条通配过渡（连模糊滤镜一起过渡）。
+           themeMap 属禁改区（E 项边界），所以在这里用更高特异性的选择器压成显式属性列表：
+           模糊本体按既定视觉原样保留，但模糊滤镜不再参与过渡，也没有通配过渡。
+           html body .card 的特异性高于注入样式里的单类选择器，因此不依赖样式表顺序。 */
+        html body .card,
+        html body .control-section {
+            transition-property: background-color, border-color, box-shadow, color, transform, opacity;
+            transition-duration: 0.2s;
+            transition-timing-function: ease-out;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+
+            #loading-spinner {
+                animation: none !important;
+            }
+
+            /* 悬停位移一律取消（DESIGN.md「Don't」：不用 transform 做悬停位移） */
+            .button-group-inline button:hover,
+            .rule-actions-group>button:hover,
+            button.danger:hover,
+            .modal-content,
+            .modal-overlay.visible .modal-content {
+                transform: none !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -753,19 +797,19 @@
                             <input type="checkbox" id="auto-refresh-toggle" class="generic-switch-input">
                             <span class="generic-switch-slider"></span>
                         </label>
-                        <button id="refresh-now-btn" class="btn"><i class="fas fa-sync-alt"></i> 立即刷新</button>
+                        <button id="refresh-now-btn" class="btn" aria-label="立即刷新数据"><i class="fas fa-sync-alt"></i> 立即刷新</button>
                     </div>
 
                     <div class="control-separator"></div>
 
                     <div class="control-group">
-                        <button id="start-capture-btn" class="btn">
+                        <button id="start-capture-btn" class="btn" aria-label="开始抓取日志">
                             <i class="fas fa-bug"></i> 日志抓取
                         </button>
-                        <input type="number" id="capture-duration-input" value="15" min="1" max="600">
+                        <input type="number" id="capture-duration-input" value="15" min="1" max="600" aria-label="日志抓取时长秒数">
                         <span class="duration-unit">秒</span>
                         <i class="fas fa-info-circle info-tooltip-icon" data-tooltip="点击开始抓取。到期后debug会自动关闭，日志在获取一次后自动清空。"></i>
-                        <button id="get-logs-btn" class="btn">
+                        <button id="get-logs-btn" class="btn" aria-label="分析已抓取的日志">
                             <i class="fas fa-search"></i> 分析日志
                         </button>
                     </div>
@@ -773,7 +817,7 @@
                 <!-- MODIFICATION END -->
 
                 <div class="rule-actions-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                    <div class="button-group-inline"><button id="flush-cache-btn" class="btn"><i class="fas fa-broom"></i> 清空全部缓存</button><button id="restart-mosdns-btn" class="btn danger"><i class="fas fa-redo"></i> 重启 MosDNS</button></div>
+                    <div class="button-group-inline"><button id="flush-cache-btn" class="btn" aria-label="清空全部缓存"><i class="fas fa-broom"></i> 清空全部缓存</button><button id="restart-mosdns-btn" class="btn danger" aria-label="重启 MosDNS 服务"><i class="fas fa-redo"></i> 重启 MosDNS</button></div>
                 </div>
 
                 <h5 class="subsection-title">数据查看</h5>
@@ -782,12 +826,12 @@
                 <h5 class="subsection-title">DNS 诊断</h5>
                 <!-- DNS 诊断：请求 /api/v1/diagnose 后以键值表展示结果 -->
                 <div class="control-group" style="gap: .6rem; flex-wrap: wrap;">
-                    <input type="text" id="diagnose-name" placeholder="example.com" style="width: 220px; height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0.6rem 0.9rem;" />
-                    <select id="diagnose-type" style="height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0 .6rem;">
+                    <input type="text" id="diagnose-name" placeholder="example.com" style="width: 220px; height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0.6rem 0.9rem;" / aria-label="要诊断的域名">
+                    <select id="diagnose-type" style="height: 38px; box-sizing: border-box; background-color: var(--control-bg); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--control-text); font-size: 0.95rem; padding: 0 .6rem;" aria-label="诊断查询类型">
                         <option value="A">A</option>
                         <option value="AAAA">AAAA</option>
                     </select>
-                    <button id="diagnose-btn" class="btn"><i class="fas fa-vial"></i> 测试</button>
+                    <button id="diagnose-btn" class="btn" aria-label="发起 DNS 诊断测试"><i class="fas fa-vial"></i> 测试</button>
                 </div>
                 <div class="metrics-container" id="diagnose-result" style="margin-top: 1rem;">
                     <div class="metric-label"><i class="fas fa-crosshairs"></i> <span>命中规则:</span></div>
@@ -824,7 +868,7 @@
                 <p class="audit-recent-empty">读取中…</p>
             </div>
             <div style="margin-top: 1rem;">
-                <button id="audit-view-all-btn" class="btn"><i class="fas fa-list-alt"></i> 查看全部日志</button>
+                <button id="audit-view-all-btn" class="btn" aria-label="查看全部审计日志"><i class="fas fa-list-alt"></i> 查看全部日志</button>
             </div>
         </section>
         <section class="control-section" data-module="system-info">
@@ -846,8 +890,8 @@
                         <div class="theme-selector" id="theme-selector"></div>
                         <h5 class="subsection-title">自定义背景</h5>
                         <div class="button-group-inline">
-                            <button id="set-bg-btn" class="btn"><i class="fas fa-image"></i> 设置背景 URL</button>
-                            <button id="remove-bg-btn" class="btn danger"><i class="fas fa-trash"></i> 移除背景</button>
+                            <button id="set-bg-btn" class="btn" aria-label="设置背景图片 URL"><i class="fas fa-image"></i> 设置背景 URL</button>
+                            <button id="remove-bg-btn" class="btn danger" aria-label="移除自定义背景"><i class="fas fa-trash"></i> 移除背景</button>
                         </div>
                         <h5 class="subsection-title">毛玻璃强度</h5>
                         <div class="blur-control">
@@ -855,7 +899,7 @@
                                 <input type="checkbox" id="blur-toggle" class="generic-switch-input">
                                 <span class="generic-switch-slider"></span>
                             </label>
-                            <input type="range" id="blur-slider" min="0" max="30" value="12" step="1">
+                            <input type="range" id="blur-slider" min="0" max="30" value="12" step="1" aria-label="玻璃拟态模糊强度">
                         </div>
                         <h5 class="subsection-title">显示缓存卡片</h5>
                         <div class="card-toggle-group" id="card-toggles"></div>
@@ -894,7 +938,7 @@
                 <p id="error-modal-message"></p>
             </div>
             <div class="modal-footer">
-                <button id="error-modal-close" class="modal-close-btn">关闭</button>
+                <button id="error-modal-close" class="modal-close-btn" aria-label="关闭错误提示">关闭</button>
             </div>
         </div>
     </div>
@@ -907,11 +951,11 @@
                 <div>
                     <h3 id="data-modal-title">数据查看</h3>
                     <div class="modal-search-area">
-                        <input type="text" id="data-modal-search" placeholder="搜索域名..." class="data-modal-search-input">
+                        <input type="text" id="data-modal-search" placeholder="搜索域名..." class="data-modal-search-input" aria-label="搜索数据查看内容">
                         <span id="data-modal-info" class="data-modal-info-text"></span>
                     </div>
                 </div>
-                <button id="data-modal-close" class="modal-close-btn-simple">×</button>
+                <button id="data-modal-close" class="modal-close-btn-simple" aria-label="关闭数据查看弹窗">×</button>
             </div>
             <div id="data-modal-body" class="modal-body"></div>
         </div>
@@ -1002,6 +1046,11 @@
             'eva': { name: '初号机', icon: 'fas fa-robot', cssVars: { '--bg-color': '#1e1a2f', '--text-color': '#f0f0f0', '--card-bg': 'rgba(40, 35, 60, 0.8)', '--card-shadow': '0 8px 30px rgba(125, 233, 56, 0.2)', '--border-color': '#5a5278', '--accent-color': '#7de938', '--label-color': '#b0a8d1', '--value-color': '#ffffff', '--control-bg': '#28233c', '--control-border': '#5a5278', '--control-text': '#e0e0e0', '--control-hover-bg': 'rgba(90, 82, 120, 0.7)', '--control-active-bg': '#7de938', '--control-active-text': '#1e1a2f', '--status-green': '#7de938', '--gradient-start': '#7de938', '--gradient-mid': '#8a3ffc', '--gradient-end': '#7de938', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(125, 233, 56, 0.8)', miss: 'rgba(138, 63, 252, 0.5)', text: '#f0f0f0' }, extraStyles: {'body': 'background-color: #1e1a2f; background-image: radial-gradient(circle, #2e284d 0%, #1e1a2f 70%);'} },
             'monokai': { name: 'Monokai Pro', icon: 'fas fa-code', cssVars: { '--bg-color': '#222324', '--text-color': '#fcfcfa', '--card-bg': 'rgba(45, 46, 47, 0.85)', '--card-shadow': '0 8px 25px rgba(0, 0, 0, 0.5)', '--border-color': '#414344', '--accent-color': '#ff6188', '--label-color': '#8f908a', '--value-color': '#fcfcfa', '--control-bg': '#3a3b3c', '--control-border': '#515252', '--control-text': '#d5d6d2', '--control-hover-bg': '#4a4b4d', '--control-active-bg': '#ff6188', '--control-active-text': '#222324', '--status-green': '#a9dc76', '--gradient-start': '#ff6188', '--gradient-mid': '#a9dc76', '--gradient-end': '#78dce8', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(255, 97, 136, 0.8)', miss: 'rgba(169, 220, 118, 0.6)', text: '#fcfcfa' } },
             'solarized_dark': { name: 'Solarized Dark', icon: 'fas fa-adjust', cssVars: { '--bg-color': '#002b36', '--text-color': '#93a1a1', '--card-bg': 'rgba(7, 54, 66, 0.8)', '--card-shadow': '0 6px 18px rgba(0, 0, 0, 0.4)', '--border-color': '#073642', '--accent-color': '#2aa198', '--label-color': '#657b83', '--value-color': '#eee8d5', '--control-bg': '#073642', '--control-border': '#586e75', '--control-text': '#93a1a1', '--control-hover-bg': 'rgba(88, 110, 117, 0.5)', '--control-active-bg': '#2aa198', '--control-active-text': '#002b36', '--status-green': '#859900', '--gradient-start': '#268bd2', '--gradient-mid': '#2aa198', '--gradient-end': '#b58900', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(42, 161, 152, 0.8)', miss: 'rgba(181, 137, 0, 0.6)', text: '#93a1a1' } },
+            'sakura': { name: '夜樱', icon: 'fas fa-fan', cssVars: { '--bg-color': '#191724', '--text-color': '#e0def4', '--card-bg': 'rgba(31, 29, 46, 0.7)', '--card-shadow': '0 8px 25px rgba(0, 0, 0, 0.5)', '--border-color': '#eb6f92', '--accent-color': '#eb6f92', '--label-color': '#908caa', '--value-color': '#e0def4', '--control-bg': '#26233a', '--control-border': '#403d52', '--control-text': '#e0def4', '--control-hover-bg': '#312f44', '--control-active-bg': '#eb6f92', '--control-active-text': '#191724', '--status-green': '#9ccfd8', '--gradient-start': '#eb6f92', '--gradient-mid': '#c4a7e7', '--gradient-end': '#eb6f92', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(235, 111, 146, 0.8)', miss: 'rgba(144, 140, 170, 0.4)', text: '#e0def4' }, extraStyles: { 'body': 'background-color: #191724; background-image: linear-gradient(170deg, #191724 0%, #21202e 50%, #393552 100%); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-color: rgba(235, 111, 146, 0.3); box-shadow: inset 0 0 0 1px rgba(235, 111, 146, 0.2), var(--card-shadow);', 'h1, h2, h4, .section-title, .metric-value': 'text-shadow: 0 0 10px rgba(235, 111, 146, 0.5);' } },
+            'evergreen': { name: '常青', icon: 'fas fa-tree', cssVars: { '--bg-color': '#1a2e26', '--text-color': '#e2e8f0', '--card-bg': 'rgba(20, 38, 31, 0.7)', '--card-shadow': '0 8px 25px rgba(0, 0, 0, 0.45)', '--border-color': '#4ade80', '--accent-color': '#4ade80', '--label-color': '#94a3b8', '--value-color': '#e2e8f0', '--control-bg': '#1f3a30', '--control-border': '#2f5c4a', '--control-text': '#e2e8f0', '--control-hover-bg': '#27503f', '--control-active-bg': '#4ade80', '--control-active-text': '#064e3b', '--status-green': '#4ade80', '--gradient-start': '#4ade80', '--gradient-mid': '#22c55e', '--gradient-end': '#16a34a', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(74, 222, 128, 0.8)', miss: 'rgba(148, 163, 184, 0.35)', text: '#e2e8f0' }, extraStyles: { 'body': 'background-color: #1a2e26; background-image: radial-gradient(circle at 20% 20%, #2c5d4c 0%, #1a2e26 60%); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-color: rgba(74, 222, 128, 0.28);' } },
+            'starlight': { name: '星光', icon: 'fas fa-star', cssVars: { '--bg-color': '#000', '--text-color': '#d1d5db', '--card-bg': 'rgba(10, 10, 25, 0.6)', '--card-shadow': '0 8px 30px rgba(59, 130, 246, 0.25)', '--border-color': '#3b82f6', '--accent-color': '#3b82f6', '--label-color': '#6b7280', '--value-color': '#d1d5db', '--control-bg': 'rgba(15, 18, 35, 0.85)', '--control-border': 'rgba(59, 130, 246, 0.45)', '--control-text': '#d1d5db', '--control-hover-bg': 'rgba(30, 41, 80, 0.9)', '--control-active-bg': '#3b82f6', '--control-active-text': '#ffffff', '--status-green': '#34d399', '--gradient-start': '#3b82f6', '--gradient-mid': '#8b5cf6', '--gradient-end': '#06b6d4', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(59, 130, 246, 0.85)', miss: 'rgba(107, 114, 128, 0.35)', text: '#d1d5db' }, extraStyles: { 'body': 'background-color: #000; background-image: radial-gradient(circle at 50% 0%, #0a0a19 0%, #000 70%); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-color: rgba(59, 130, 246, 0.35);', 'h1, h2, h4, .section-title, .metric-value': 'text-shadow: 0 0 12px rgba(59, 130, 246, 0.55);' } },
+            'dusk': { name: '黄昏', icon: 'fas fa-cloud-sun', cssVars: { '--bg-color': '#232526', '--text-color': '#F2F2F2', '--card-bg': 'rgba(20, 20, 20, 0.5)', '--card-shadow': '0 8px 25px rgba(0, 0, 0, 0.55)', '--border-color': '#FF8C00', '--accent-color': '#FF8C00', '--label-color': '#A9A9A9', '--value-color': '#F2F2F2', '--control-bg': 'rgba(40, 40, 42, 0.75)', '--control-border': 'rgba(255, 140, 0, 0.45)', '--control-text': '#F2F2F2', '--control-hover-bg': 'rgba(60, 58, 54, 0.9)', '--control-active-bg': '#FF8C00', '--control-active-text': '#000', '--status-green': '#98FB98', '--gradient-start': '#434343', '--gradient-mid': '#fd746c', '--gradient-end': '#232526', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(255, 140, 0, 0.85)', miss: 'rgba(169, 169, 169, 0.35)', text: '#F2F2F2' }, extraStyles: { 'body': 'background-color: #232526; background-image: linear-gradient(-45deg, #434343, #232526, #2c3e50, #fd746c); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-color: rgba(255, 140, 0, 0.35);' } },
+            'terra': { name: '赤土', icon: 'fas fa-mountain', cssVars: { '--bg-color': '#4a2a22', '--text-color': '#f2e9e4', '--card-bg': 'rgba(45, 30, 26, 0.6)', '--card-shadow': '0 8px 25px rgba(0, 0, 0, 0.45)', '--border-color': '#ff8c42', '--accent-color': '#ff8c42', '--label-color': '#a99985', '--value-color': '#f2e9e4', '--control-bg': 'rgba(61, 40, 33, 0.85)', '--control-border': 'rgba(255, 140, 66, 0.45)', '--control-text': '#f2e9e4', '--control-hover-bg': 'rgba(90, 58, 47, 0.9)', '--control-active-bg': '#ff8c42', '--control-active-text': '#2d1e1a', '--status-green': '#a7c957', '--gradient-start': '#ff8c42', '--gradient-mid': '#c9ada7', '--gradient-end': '#6b4235', '--font-family-main': baseFontStack }, chartColors: { hit: 'rgba(255, 140, 66, 0.85)', miss: 'rgba(169, 153, 133, 0.4)', text: '#f2e9e4' }, extraStyles: { 'body': 'background-color: #4a2a22; background-image: linear-gradient(160deg, #4a2a22 0%, #2d1e1a 100%); background-attachment: fixed;', '.card, .control-section': 'border-color: rgba(255, 140, 66, 0.32); box-shadow: inset 0 0 0 1px rgba(255, 140, 66, 0.15), var(--card-shadow);' } },
         };
         
         const cacheConfig = {
@@ -2215,6 +2264,17 @@
 
         // --- END OF REVISED LOG RENDERING LOGIC ---
 
+        // 循环动画离屏暂停：首页唯一保留的循环动画是 #loading-spinner，
+        // 离屏（或已隐藏）时给它打 .anim-paused，交给 CSS 的 animation-play-state: paused 停住。
+        function setupOffscreenAnimationPause() {
+            if (typeof IntersectionObserver === 'undefined') return;
+            const spinner = getById('loading-spinner');
+            if (!spinner) return;
+            new IntersectionObserver((entries) => {
+                entries.forEach(entry => spinner.classList.toggle('anim-paused', !entry.isIntersecting));
+            }, { rootMargin: '0px' }).observe(spinner);
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             // No need to initialize Mermaid here anymore
             dataModalSearchInput = getById('data-modal-search'); 
@@ -2224,6 +2284,7 @@
             setupModuleDragAndDrop();
             setupEventListeners();
             setupCardToggles();
+            setupOffscreenAnimationPause();
             
             const savedTheme = localStorage.getItem('theme') || 'light';
             const blurEnabled = localStorage.getItem('blurEnabled') !== 'false';

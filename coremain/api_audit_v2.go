@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/IrineSistiana/mosdns/v5/mlog"
@@ -73,8 +74,14 @@ func handleV2GetDomainRank(w http.ResponseWriter, r *http.Request) {
 	limit := parseQueryInt(r, "limit", 20) // Default to top 20
 	// domain_set 非空时只统计该规则集下的记录，为空时走原有快速路径
 	domainSet := r.URL.Query().Get("domain_set")
-	// MODIFIED: Use the new RankByDomain enum
-	rank := GlobalAuditCollector.CalculateRankFiltered(RankByDomain, domainSet, limit) // Changed function argument
+	// blocked=true|1 时只看被拦截的记录（按应答特征判定），此时 domain_set 被忽略。
+	var rank []V2RankItem
+	if isBlockedQuery(r) {
+		rank = GlobalAuditCollector.CalculateRankBlocked(RankByDomain, limit)
+	} else {
+		// MODIFIED: Use the new RankByDomain enum
+		rank = GlobalAuditCollector.CalculateRankFiltered(RankByDomain, domainSet, limit) // Changed function argument
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(rank); err != nil {
 		mlog.L().Error("failed to encode v2 domain rank", zap.Error(err))
@@ -98,7 +105,13 @@ func handleV2GetClientRank(w http.ResponseWriter, r *http.Request) {
 // 4. Handler for: Get domain_set query ranking
 func handleV2GetDomainSetRank(w http.ResponseWriter, r *http.Request) {
 	limit := parseQueryInt(r, "limit", 20) // Default to top 20
-	rank := GlobalAuditCollector.CalculateRank(RankByDomainSet, limit)
+	// blocked=true|1 时只看被拦截的记录在哪些规则集上命中；缺省/false 保持原行为。
+	var rank []V2RankItem
+	if isBlockedQuery(r) {
+		rank = GlobalAuditCollector.CalculateRankBlocked(RankByDomainSet, limit)
+	} else {
+		rank = GlobalAuditCollector.CalculateRank(RankByDomainSet, limit)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(rank); err != nil {
 		mlog.L().Error("failed to encode v2 domain_set rank", zap.Error(err))
@@ -162,6 +175,20 @@ func handleV2GetLogs(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		mlog.L().Error("failed to encode v2 paginated logs", zap.Error(err))
 	}
+}
+
+// isBlockedQuery 解析查询参数 blocked：认 true/false 与 1/0（strconv.ParseBool 覆盖 1/0/t/f/...）。
+// 缺省、空串或解析失败一律按 false 处理，保持各端点的原有行为。
+func isBlockedQuery(r *http.Request) bool {
+	v := strings.TrimSpace(r.URL.Query().Get("blocked"))
+	if v == "" {
+		return false
+	}
+	blocked, err := strconv.ParseBool(v)
+	if err != nil {
+		return false
+	}
+	return blocked
 }
 
 // Helper function to parse integer from query string with a default value.

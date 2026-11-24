@@ -45,3 +45,4 @@ log/
 *.dump.yml
 .env
 bin/
+runs/

@@ -141,3 +141,11 @@ body {
     background: rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+/* 8. 动效兜底：本文件里的骨架屏循环动画在减少动效偏好下关停
+      （页面级完整规则在 log_refactored.css / log.html / mosdnsp.html 的内联块里） */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none !important;
+    }
+}

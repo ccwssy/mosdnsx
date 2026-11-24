@@ -33,11 +33,10 @@ function closeAndUnlock(dialogElement) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const CONSTANTS = { API_BASE_URL: '', LOGS_PER_PAGE: 50, HISTORY_LENGTH: 60, DEFAULT_AUTO_REFRESH_INTERVAL: 15, ANIMATION_DURATION: 1000, MOBILE_BREAKPOINT: 1024, TOAST_DURATION: 3000, SKELETON_ROWS: 10, TOOLTIP_SHOW_DELAY: 200, TOOLTIP_HIDE_DELAY: 250, UPDATE_AUTO_MINUTES_DEFAULT: 1440 };
-    let state = { isUpdating: false, isCapturing: false, isMobile: false, isTouchDevice: false, currentLogPage: 1, isLogLoading: false, logPaginationInfo: null, displayedLogs: [], currentLogSearchTerm: '', clientAliases: {}, topDomains: [], topClients: [], topBlocked: [], slowestQueries: [], upstreamStats: [], domainSetRank: [], shuntColors: {}, logSort: { key: 'query_time', order: 'desc' }, autoRefresh: { enabled: false, intervalId: null, intervalSeconds: CONSTANTS.DEFAULT_AUTO_REFRESH_INTERVAL }, data: { totalQueries: { current: null, previous: null }, avgDuration: { current: null, previous: null }, todayQueries: { current: null, previous: null }, blocked: { queries: null, ratio: null } }, history: { totalQueries: [], avgDuration: [], timestamps: [] }, lastUpdateTime: null, adguardRules: [], diversionRules: [], dataView: { rawEntries: [], filteredEntries: [], viewType: 'domain', currentOffset: 0, currentLimit: 100, currentQuery: '', currentConfig: null, hasMore: true, totalCount: 0 }, cacheStats: {}, listManagerInitialized: false, featureSwitches: {}, systemInfo: {}, update: { status: null, loading: false, auto: { enabled: true, intervalMinutes: CONSTANTS.UPDATE_AUTO_MINUTES_DEFAULT, timerId: null } } };
+    let state = { isUpdating: false, isCapturing: false, isMobile: false, isTouchDevice: false, currentLogPage: 1, isLogLoading: false, logPaginationInfo: null, displayedLogs: [], currentLogSearchTerm: '', clientAliases: {}, topDomains: [], topClients: [], topBlocked: [], slowestQueries: [], upstreamStats: [], domainSetRank: [], shuntColors: {}, logSort: { key: 'query_time', order: 'desc' }, autoRefresh: { enabled: false, intervalId: null, intervalSeconds: CONSTANTS.DEFAULT_AUTO_REFRESH_INTERVAL }, data: { totalQueries: { current: null, previous: null }, avgDuration: { current: null, previous: null }, todayQueries: { current: null, previous: null }, blocked: { queries: null, ratio: null } }, history: { totalQueries: [], avgDuration: [], timestamps: [] }, lastUpdateTime: null, adguardRules: [], diversionRules: [], dataView: { rawEntries: [], filteredEntries: [], viewType: 'domain', currentOffset: 0, currentLimit: 100, currentQuery: '', currentConfig: null, hasMore: true, totalCount: 0 }, cacheStats: {}, listManagerInitialized: false, systemInfo: {}, update: { status: null, loading: false, auto: { enabled: true, intervalMinutes: CONSTANTS.UPDATE_AUTO_MINUTES_DEFAULT, timerId: null } } };
     const elements = {
         html: document.documentElement, body: document.body, container: document.querySelector('.container'), initialLoader: document.getElementById('initial-loader'),
         colorSwatches: document.querySelectorAll('.color-swatch'),
-        themeSwitcher: document.getElementById('theme-switcher-select'),
         layoutSwitcher: document.getElementById('layout-density-select'),
         mainNav: document.querySelector('.main-nav'), navSlider: document.querySelector('.main-nav-slider'),
         tabLinks: document.querySelectorAll('.tab-link'), tabContents: document.querySelectorAll('.tab-content'),
@@ -126,8 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
         listMgmtNFTIpHint: document.getElementById('list-mgmt-nft-ip-hint'),
         listMgmtRewriteHint: document.getElementById('list-mgmt-rewrite-hint'),
 
-        featureSwitchesModule: document.getElementById('feature-switches-module'),
-        secondarySwitchesContainer: document.getElementById('secondary-switches-container'),
         systemInfoContainer: document.getElementById('system-info-container'),
     };
     let toastTimeout;
@@ -159,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 轻量级请求器 + /metrics 简易缓存，减少同一时段的重复请求
     let __metricsInflight = null; let __metricsStamp = 0;
-    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v1: { getUpstreamStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/upstream/stats`, { signal }) }, v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getBlockedDomains: (signal, limit = 10) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?domain_set=adguard&limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50, since = null) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}${since ? '&since=' + encodeURIComponent(since) : ''}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
+    const api = { fetch: async (url, options = {}) => { try { const response = await fetch(url, { ...options, signal: options.signal }); if (!response.ok) { let errorMsg = `API Error: ${response.status} ${response.statusText}`; try { const errorBody = await response.json(); if (errorBody && errorBody.error) { errorMsg = errorBody.error; } } catch (e) { try { errorMsg = await response.text() || errorMsg; } catch (textErr) { } } if (response.status !== 404) { ui.showToast(errorMsg, 'error'); } throw new Error(errorMsg); } const tc = response.headers.get('X-Total-Count'); const ct = response.headers.get('content-type'); const data = (ct && ct.includes('application/json')) ? await response.json() : await response.text(); return tc !== null ? { body: data, totalCount: parseInt(tc, 10) } : data; } catch (error) { if (error.name !== 'AbortError') { console.error(error); } throw error; } }, getStatus: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/status`, { signal }), getCapacity: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { signal }), start: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/start`, { method: 'POST' }), stop: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/stop`, { method: 'POST' }), clear: () => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/clear`, { method: 'POST' }), setCapacity: (capacity) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/audit/capacity`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ capacity: parseInt(capacity, 10) }) }), getMetrics: (signal) => { const now = Date.now(); if (__metricsInflight && (now - __metricsStamp) < 3000) return __metricsInflight; __metricsInflight = api.fetch('/metrics', { signal }); __metricsStamp = now; return __metricsInflight; }, clearCache: (cacheTag) => api.fetch(`/plugins/${cacheTag}/flush`), getCacheContents: (cacheTag, signal) => api.fetch(`/plugins/${cacheTag}/show`, { signal }), v1: { getUpstreamStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v1/upstream/stats`, { signal }) }, v2: { getStats: (signal) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/stats`, { signal }), getTopDomains: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?limit=${limit}`, { signal }), getBlockedDomains: (signal, limit = 10) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain?blocked=true&limit=${limit}`, { signal }), getTopClients: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/client?limit=${limit}`, { signal }), getSlowest: (signal, limit = 50, since = null) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/slowest?limit=${limit}${since ? '&since=' + encodeURIComponent(since) : ''}`, { signal }), getDomainSetRank: (signal, limit = 50) => api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/rank/domain_set?limit=${limit}`, { signal }), getLogs: (signal, params = {}) => { const queryParams = new URLSearchParams({ page: 1, limit: CONSTANTS.LOGS_PER_PAGE, ...params }); for (let [key, value] of queryParams.entries()) { if (!value) { queryParams.delete(key); } } return api.fetch(`${CONSTANTS.API_BASE_URL}/api/v2/audit/logs?${queryParams}`, { signal }); } } };
 
     const updateApi = {
         getStatus: (signal) => api.fetch(`/api/v1/update/status`, { signal }),
@@ -334,89 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.navSlider.style.width = `${linkRect.width}px`;
         elements.navSlider.style.transform = `translateX(${left}px)`;
     }
-
-    const switchManager = {
-        profiles: [{ tag: "high_priority_whitelist", name: "白名单" }, { tag: "high_priority_greylist", name: "灰名单" }],
-
-        init() {
-            elements.secondarySwitchesContainer.addEventListener('change', e => {
-                const input = e.target.closest('input[type="checkbox"]');
-                if (input) {
-                    this.handleSecondarySwitch(input);
-                }
-            });
-        },
-
-        async loadStatus(signal) {
-            try {
-                const fetchPromises = this.profiles.map(p => api.fetch(`/plugins/${p.tag}/show`, { signal }));
-                const results = await Promise.allSettled(fetchPromises);
-
-                results.forEach((result, index) => {
-                    const profile = this.profiles[index];
-                    if (result.status === 'fulfilled') {
-                        state.featureSwitches[profile.tag] = result.value.trim();
-                    } else {
-                        state.featureSwitches[profile.tag] = 'error';
-                        console.error(`获取 ${profile.tag} 状态失败:`, result.reason);
-                    }
-                });
-                this.render();
-            } catch (error) {
-                if (error.name !== 'AbortError') {
-                    elements.featureSwitchesModule.innerHTML = '<h3>功能开关</h3><p style="color:var(--color-danger)">加载开关状态失败。</p>';
-                }
-            }
-        },
-
-        render() {
-            const secondaryProfiles = this.profiles.filter(p => !p.modes);
-            let html = '';
-            secondaryProfiles.forEach(profile => {
-                const status = state.featureSwitches[profile.tag];
-                const isChecked = status === profile.valueForOn;
-                const isDisabled = status === 'error';
-                html += `
-                    <div class="control-item">
-                        <strong class="switch-label">
-                            <span class="title-line">
-                                <span>${profile.name}</span>
-                                <span class="info-icon" title="${profile.tip}">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v2h-2V7zm0 4h2v6h-2v-6z"></path></svg>
-                                </span>
-                            </span>
-                            ${profile.desc ? `<span class="switch-desc">${profile.desc}</span>` : ''}
-                        </strong>
-                        <label class="switch">
-                            <input type="checkbox" data-switch-tag="${profile.tag}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
-                            <span class="slider"></span>
-                        </label>
-                    </div>`;
-            });
-            elements.secondarySwitchesContainer.innerHTML = html;
-            bindInfoIconTooltips();
-        },
-
-        async handleSecondarySwitch(checkbox) {
-            const tag = checkbox.dataset.switchTag;
-            const profile = this.profiles.find(p => p.tag === tag);
-            if (!profile) return;
-
-            checkbox.disabled = true;
-            const valueToPost = checkbox.checked ? profile.valueForOn : (profile.valueForOn === 'A' ? 'B' : 'A');
-
-            try {
-                await api.fetch(`/plugins/${tag}/post`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: valueToPost }) });
-                state.featureSwitches[tag] = valueToPost;
-                ui.showToast(`“${profile.name}” 已${checkbox.checked ? '启用' : '禁用'}`);
-            } catch (error) {
-                ui.showToast(`切换“${profile.name}”失败`, 'error');
-                checkbox.checked = !checkbox.checked;
-            } finally {
-                checkbox.disabled = false;
-            }
-        }
-    };
 
     const updateManager = {
         init() {
@@ -1040,26 +954,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const themeManager = {
+        // 主题不在这里管：主题唯一真源是首页 mosdnsp.html 的 themeMap（存储键 theme），
+        // 由下方 homeAppearance 翻译成本页 --color-* 变量。这里只保留日志页自身的三项设置。
         init() {
-            const savedTheme = localStorage.getItem('mosdns-theme') || 'dark';
             const savedColor = localStorage.getItem('mosdns-color') || 'indigo';
             const savedLayout = localStorage.getItem('mosdns-layout') || 'comfortable';
             const savedChartMode = localStorage.getItem('mosdns-chart-mode') || 'integrated';
 
-            this.setTheme(savedTheme, false);
             this.setColor(savedColor, false);
             this.setLayout(savedLayout, false);
             this.setChartMode(savedChartMode, false);
 
-            elements.themeSwitcher?.addEventListener('change', e => this.setTheme(e.target.value));
             elements.layoutSwitcher?.addEventListener('change', e => this.setLayout(e.target.value));
             elements.overviewChartModeToggle?.addEventListener('change', e => this.setChartMode(e.target.checked ? 'independent' : 'integrated'));
             elements.colorSwatches.forEach(swatch => { swatch.addEventListener('click', () => this.setColor(swatch.dataset.color)); });
-        },
-        setTheme(theme, save = true) {
-            elements.html.setAttribute('data-theme', theme);
-            if (elements.themeSwitcher) { elements.themeSwitcher.value = theme; }
-            if (save) localStorage.setItem('mosdns-theme', theme);
         },
         setColor(color, save = true) {
             elements.html.setAttribute('data-color-scheme', color);
@@ -1096,21 +1004,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // 日志页跟随首页「外观设置」：真源是 localStorage 的 theme / customBackgroundUrl，
-    // 只做 documentElement 内联变量覆盖（内联优先级高于 [data-theme] 规则），不改任何 CSS 文件、不写 localStorage。
+    // 日志页跟随首页「外观设置」：唯一真源是首页 localStorage 的 theme / customBackgroundUrl。
+    // 日志页不再有自己的主题存储键；这里只把首页 themeMap 的语义翻译成日志页 --color-* 变量，
+    // 通过 documentElement 内联变量覆盖（内联优先级高于下方 log_refactored.css 的 [data-theme] 规则），不写 localStorage。
+    //
+    // 此表与 mosdnsp.html 的 themeMap 保持一致，改一边必须同步另一边（两套独立文件，无法共享代码）。
+    // 覆盖首页全部 17 套（12 原有 + sakura/evergreen/starlight/dusk/terra 5 套新增）。
+    // 字段：bg/card/text/label/value/border/accent/accentText/success/cardShadow + control*
+    //       + gradient* + chart{hit,miss,text} + extra（按 key 注入 <style id="theme-extra-styles">）
     const HOME_THEME_VARS = {
-        light: { bg: '#f7f9fd', card: '#ffffff', text: '#2c3e50', border: '#e0e6ec', accent: '#4a90e2', label: '#7f8c8d' },
-        dark: { bg: '#1a1a1a', card: '#282828', text: '#e0e0e0', border: '#3a3a3a', accent: '#5096ff', label: '#bbbbbb' },
-        glass: { bg: '#141824', card: 'rgba(255, 255, 255, 0.1)', text: '#ffffff', border: 'rgba(255, 255, 255, 0.2)', accent: '#90b8ff', label: '#d0d0d0' },
-        material: { bg: '#f8f9fa', card: '#ffffff', text: '#202124', border: '#dadce0', accent: '#4285f4', label: '#5f6368' },
-        cupertino_light: { bg: '#f5f5f7', card: '#ffffff', text: '#1d1d1f', border: '#d2d2d7', accent: '#007aff', label: '#6e6e73' },
-        cupertino_dark: { bg: '#1d1d1f', card: 'rgba(50, 50, 52, 0.7)', text: 'rgba(255, 255, 255, 0.9)', border: 'rgba(84, 84, 88, 0.65)', accent: '#0a84ff', label: 'rgba(235, 235, 245, 0.6)' },
-        cyberpunk: { bg: '#1a0933', card: 'rgba(26, 9, 51, 0.6)', text: '#e0d8f0', border: 'rgba(0, 255, 255, 0.5)', accent: '#ff00ea', label: '#9085a6' },
-        kawaii: { bg: '#fcefee', card: 'rgba(255, 255, 255, 0.7)', text: '#5e4856', border: 'rgba(234, 182, 182, 0.5)', accent: '#ff8a8a', label: '#a08a9a' },
-        miku: { bg: '#1c2833', card: 'rgba(35, 55, 75, 0.85)', text: '#fdfefe', border: '#3498db', accent: '#39c5bb', label: '#aed6f1' },
-        eva: { bg: '#1e1a2f', card: 'rgba(40, 35, 60, 0.8)', text: '#f0f0f0', border: '#5a5278', accent: '#7de938', label: '#b0a8d1' },
-        monokai: { bg: '#222324', card: 'rgba(45, 46, 47, 0.85)', text: '#fcfcfa', border: '#414344', accent: '#ff6188', label: '#8f908a' },
-        solarized_dark: { bg: '#002b36', card: 'rgba(7, 54, 66, 0.8)', text: '#93a1a1', border: '#073642', accent: '#2aa198', label: '#657b83' }
+        light: { name: '默认亮色', bg: '#f7f9fd', card: '#ffffff', text: '#2c3e50', label: '#7f8c8d', value: '#34495e', border: '#e0e6ec', accent: '#4a90e2', accentText: '#ffffff', success: '#2ecc71', cardShadow: '0 6px 18px rgba(0, 0, 0, 0.08)', controlBg: '#f0f4f7', controlBorder: '#d5dce2', controlText: '#5e727e', controlHoverBg: '#e5edf3', controlActiveBg: '#4a90e2', gradientStart: '#4a90e2', gradientMid: '#2e86de', gradientEnd: '#4a90e2', chart: { hit: 'rgba(74, 144, 226, 0.7)', miss: 'rgba(189, 195, 199, 0.3)', text: '#2c3e50' } },
+        dark: { name: '默认暗色', bg: '#1a1a1a', card: '#282828', text: '#e0e0e0', label: '#bbbbbb', value: '#ffffff', border: '#3a3a3a', accent: '#5096ff', accentText: '#ffffff', success: '#2ecc71', cardShadow: '0 8px 25px rgba(0, 0, 0, 0.5)', controlBg: '#353535', controlBorder: '#4a4a4a', controlText: '#e0e0e0', controlHoverBg: '#404040', controlActiveBg: '#5096ff', gradientStart: '#5096ff', gradientMid: '#3a7ce0', gradientEnd: '#5096ff', chart: { hit: 'rgba(80, 150, 255, 0.7)', miss: 'rgba(100, 100, 100, 0.3)', text: '#e0e0e0' }, extra: { 'h1, h2, h4, .section-title, .metric-label, .metric-value, .switch-label-text, .tab-button, footer, .control-base-label, .data-view-group button': 'text-shadow: 0 1px 3px rgba(0,0,0,0.5);', '.fas, .fa-brands': 'filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));' } },
+        glass: { name: '高光琉璃', bg: 'transparent', card: 'rgba(255, 255, 255, 0.1)', text: '#ffffff', label: '#d0d0d0', value: '#ffffff', border: 'rgba(255, 255, 255, 0.2)', accent: '#90b8ff', accentText: '#1a1a1a', success: '#2ecc71', cardShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)', controlBg: 'rgba(255, 255, 255, 0.15)', controlBorder: 'rgba(255, 255, 255, 0.2)', controlText: '#f0f0f0', controlHoverBg: 'rgba(255, 255, 255, 0.25)', controlActiveBg: '#90b8ff', gradientStart: '#82aaff', gradientMid: '#c792ea', gradientEnd: '#82aaff', chart: { hit: 'rgba(130, 170, 255, 0.7)', miss: 'rgba(255, 255, 255, 0.15)', text: '#ffffff' }, extra: { '.card, .control-section': 'backdrop-filter: blur(var(--glass-blur-strength)); -webkit-backdrop-filter: blur(var(--glass-blur-strength)); background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 60%); box-shadow: inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.1), var(--card-shadow); border: none; transition: background-color 0.2s ease, box-shadow 0.2s ease;', 'h1, h2, h4, .section-title, .metric-label, .metric-value, .switch-label-text, .tab-button, footer, .control-base-label, .data-view-group button': 'text-shadow: 0 1px 4px rgba(0,0,0,0.6);', '.fas, .fa-brands': 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));' } },
+        material: { name: '谷歌设计', bg: '#f8f9fa', card: '#ffffff', text: '#202124', label: '#5f6368', value: '#202124', border: '#dadce0', accent: '#4285f4', accentText: '#ffffff', success: '#34a853', cardShadow: '0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15)', controlBg: '#f1f3f4', controlBorder: '#dadce0', controlText: '#3c4043', controlHoverBg: '#e8eaed', controlActiveBg: '#4285f4', gradientStart: '#4285f4', gradientMid: '#fbbc05', gradientEnd: '#34a853', chart: { hit: 'rgba(52, 168, 83, 0.8)', miss: 'rgba(234, 67, 53, 0.8)', text: '#202124' }, extra: { 'body': 'background-image: url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\' viewBox=\'0 0 100 100\'%3E%3Cg fill-rule=\'evenodd\'%3E%3Cg fill=\'%23e8eaed\' fill-opacity=\'0.4\'%3E%3Cpath opacity=\'.5\' d=\'M96 95h4v1h-4v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9zm-1 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9z\'/%3E%3Cpath d=\'M6 5V0h1v5h5v1H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");', '.card, .control-section': 'border-radius: 8px;', '.control-base-label, #refresh-now-btn, .data-view-group button': 'border-radius: 20px;', '.card-title-gradient-bar': 'background-image: linear-gradient(to right, #4285f4, #ea4335, #fbbc05, #34a853); animation: none;', '.fas, .fa-brands': 'text-shadow: 1px 1px 2px rgba(0,0,0,0.1);' } },
+        cupertino_light: { name: '苹果浅色', bg: '#f5f5f7', card: '#ffffff', text: '#1d1d1f', label: '#6e6e73', value: '#1d1d1f', border: '#d2d2d7', accent: '#007aff', accentText: '#ffffff', success: '#34c759', cardShadow: '0 4px 15px rgba(0,0,0,0.08)', controlBg: '#e9e9eb', controlBorder: '#d2d2d7', controlText: '#3a3a3c', controlHoverBg: '#e1e1e3', controlActiveBg: '#007aff', gradientStart: '#007aff', gradientMid: '#007aff', gradientEnd: '#007aff', chart: { hit: 'rgba(0, 122, 255, 0.8)', miss: 'rgba(142, 142, 147, 0.6)', text: '#1d1d1f' }, extra: { '.card, .control-section': 'border-radius: 12px;', 'h1, h2, h4': 'font-weight: 600;', '.metric-value': 'font-weight: 500;', '.card-title-gradient-bar': 'background-image: none;' } },
+        cupertino_dark: { name: '苹果暗色', bg: '#1d1d1f', card: 'rgba(50, 50, 52, 0.7)', text: 'rgba(255, 255, 255, 0.9)', label: 'rgba(235, 235, 245, 0.6)', value: '#ffffff', border: 'rgba(84, 84, 88, 0.65)', accent: '#0a84ff', accentText: '#ffffff', success: '#32d74b', cardShadow: '0 12px 30px rgba(0,0,0,0.6)', controlBg: 'rgba(60, 60, 62, 0.8)', controlBorder: 'rgba(84, 84, 88, 0.65)', controlText: 'rgba(255, 255, 255, 0.9)', controlHoverBg: 'rgba(80, 80, 82, 0.9)', controlActiveBg: '#0a84ff', gradientStart: '#0a84ff', gradientMid: '#5e5ce6', gradientEnd: '#bf5af2', chart: { hit: 'rgba(10, 132, 255, 0.8)', miss: 'rgba(94, 92, 230, 0.5)', text: 'rgba(255, 255, 255, 0.9)' }, extra: { '.card, .control-section': 'backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 12px;', 'h1, h2, h4': 'font-weight: 600;', '.metric-value': 'font-weight: 500;' } },
+        cyberpunk: { name: '赛博朋克', bg: '#1a0933', card: 'rgba(26, 9, 51, 0.6)', text: '#e0d8f0', label: '#9085a6', value: '#f8f8f2', border: 'rgba(0, 255, 255, 0.5)', accent: '#ff00ea', accentText: '#f8f8f2', success: '#00ffff', cardShadow: '0 0 15px rgba(255, 0, 234, 0.3), 0 0 30px rgba(0, 255, 255, 0.3)', controlBg: 'rgba(52, 18, 104, 0.5)', controlBorder: 'rgba(255, 0, 234, 0.6)', controlText: '#e0d8f0', controlHoverBg: 'rgba(255, 0, 234, 0.25)', controlActiveBg: '#ff00ea', gradientStart: '#ff00ea', gradientMid: '#00ffff', gradientEnd: '#ff00ea', chart: { hit: 'rgba(255, 0, 234, 0.8)', miss: 'rgba(0, 255, 255, 0.6)', text: '#f8f8f2' }, extra: { 'body': 'background: #1a0933 linear-gradient(180deg, rgba(26, 9, 51, 0) 0%, #341268 100%);', 'h1, h2, h4, .section-title, .metric-value, button': 'text-shadow: 0 0 5px var(--accent-color);', '.card, .control-section': 'border-image: linear-gradient(to bottom right, var(--accent-color), #00ffff) 1; border-image-slice: 1; border-style: solid; border-width: 1px;' } },
+        kawaii: { name: '粉彩可爱', bg: '#fcefee', card: 'rgba(255, 255, 255, 0.7)', text: '#5e4856', label: '#a08a9a', value: '#5e4856', border: 'rgba(234, 182, 182, 0.5)', accent: '#ff8a8a', accentText: '#ffffff', success: '#ffc0cb', cardShadow: '0 6px 20px rgba(234, 182, 182, 0.4)', controlBg: '#f9e0e0', controlBorder: '#f5c6c6', controlText: '#8c6d7d', controlHoverBg: '#f5c6c6', controlActiveBg: '#ff8a8a', gradientStart: '#ff8a8a', gradientMid: '#ffd3b6', gradientEnd: '#ff8a8a', chart: { hit: 'rgba(255, 138, 138, 0.8)', miss: 'rgba(204, 184, 212, 0.8)', text: '#5e4856' }, radiusMain: '1.2rem', radiusControl: '2rem', extra: { 'body': 'background-image: url("data:image/svg+xml,%3Csvg width=\'6\' height=\'6\' viewBox=\'0 0 6 6\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%23eadada\' fill-opacity=\'0.4\' fill-rule=\'evenodd\'%3E%3Cpath d=\'M5 0h1L0 6V5zM6 5v1H5z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");', 'h1,h2,h4': 'font-weight: 600;' } },
+        miku: { name: '初音未来', bg: '#1c2833', card: 'rgba(35, 55, 75, 0.85)', text: '#fdfefe', label: '#aed6f1', value: '#ffffff', border: '#3498db', accent: '#39c5bb', accentText: '#17202a', success: '#39c5bb', cardShadow: '0 8px 25px rgba(0, 0, 0, 0.5)', controlBg: 'rgba(46, 64, 83, 0.9)', controlBorder: '#5dade2', controlText: '#eaf2f8', controlHoverBg: 'rgba(93, 173, 226, 0.5)', controlActiveBg: '#39c5bb', gradientStart: '#39c5bb', gradientMid: '#ff4571', gradientEnd: '#39c5bb', chart: { hit: 'rgba(57, 197, 187, 0.8)', miss: 'rgba(255, 69, 113, 0.5)', text: '#fdfefe' }, extra: { 'body': 'background-color: #1c2833; background-image: linear-gradient(160deg, #1c2833 0%, #2e4053 100%);' } },
+        eva: { name: '初号机', bg: '#1e1a2f', card: 'rgba(40, 35, 60, 0.8)', text: '#f0f0f0', label: '#b0a8d1', value: '#ffffff', border: '#5a5278', accent: '#7de938', accentText: '#1e1a2f', success: '#7de938', cardShadow: '0 8px 30px rgba(125, 233, 56, 0.2)', controlBg: '#28233c', controlBorder: '#5a5278', controlText: '#e0e0e0', controlHoverBg: 'rgba(90, 82, 120, 0.7)', controlActiveBg: '#7de938', gradientStart: '#7de938', gradientMid: '#8a3ffc', gradientEnd: '#7de938', chart: { hit: 'rgba(125, 233, 56, 0.8)', miss: 'rgba(138, 63, 252, 0.5)', text: '#f0f0f0' }, extra: { 'body': 'background-color: #1e1a2f; background-image: radial-gradient(circle, #2e284d 0%, #1e1a2f 70%);' } },
+        monokai: { name: 'Monokai Pro', bg: '#222324', card: 'rgba(45, 46, 47, 0.85)', text: '#fcfcfa', label: '#8f908a', value: '#fcfcfa', border: '#414344', accent: '#ff6188', accentText: '#222324', success: '#a9dc76', cardShadow: '0 8px 25px rgba(0, 0, 0, 0.5)', controlBg: '#3a3b3c', controlBorder: '#515252', controlText: '#d5d6d2', controlHoverBg: '#4a4b4d', controlActiveBg: '#ff6188', gradientStart: '#ff6188', gradientMid: '#a9dc76', gradientEnd: '#78dce8', chart: { hit: 'rgba(255, 97, 136, 0.8)', miss: 'rgba(169, 220, 118, 0.6)', text: '#fcfcfa' } },
+        solarized_dark: { name: 'Solarized Dark', bg: '#002b36', card: 'rgba(7, 54, 66, 0.8)', text: '#93a1a1', label: '#657b83', value: '#eee8d5', border: '#073642', accent: '#2aa198', accentText: '#002b36', success: '#859900', cardShadow: '0 6px 18px rgba(0, 0, 0, 0.4)', controlBg: '#073642', controlBorder: '#586e75', controlText: '#93a1a1', controlHoverBg: 'rgba(88, 110, 117, 0.5)', controlActiveBg: '#2aa198', gradientStart: '#268bd2', gradientMid: '#2aa198', gradientEnd: '#b58900', chart: { hit: 'rgba(42, 161, 152, 0.8)', miss: 'rgba(181, 137, 0, 0.6)', text: '#93a1a1' } },
+        sakura: { name: '夜樱', bg: '#191724', card: 'rgba(31, 29, 46, 0.7)', text: '#e0def4', label: '#908caa', value: '#e0def4', border: '#eb6f92', accent: '#eb6f92', accentText: '#191724', success: '#9ccfd8', cardShadow: '0 8px 25px rgba(0, 0, 0, 0.5)', controlBg: '#26233a', controlBorder: '#403d52', controlText: '#e0def4', controlHoverBg: '#312f44', controlActiveBg: '#eb6f92', gradientStart: '#eb6f92', gradientMid: '#c4a7e7', gradientEnd: '#eb6f92', chart: { hit: 'rgba(235, 111, 146, 0.8)', miss: 'rgba(144, 140, 170, 0.4)', text: '#e0def4' }, extra: { 'body': 'background-color: #191724; background-image: linear-gradient(170deg, #191724 0%, #21202e 50%, #393552 100%); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-color: rgba(235, 111, 146, 0.3); box-shadow: inset 0 0 0 1px rgba(235, 111, 146, 0.2), var(--card-shadow);', 'h1, h2, h4, .section-title, .metric-value': 'text-shadow: 0 0 10px rgba(235, 111, 146, 0.5);' } },
+        evergreen: { name: '常青', bg: '#1a2e26', card: 'rgba(20, 38, 31, 0.7)', text: '#e2e8f0', label: '#94a3b8', value: '#e2e8f0', border: '#4ade80', accent: '#4ade80', accentText: '#064e3b', success: '#4ade80', cardShadow: '0 8px 25px rgba(0, 0, 0, 0.45)', controlBg: '#1f3a30', controlBorder: '#2f5c4a', controlText: '#e2e8f0', controlHoverBg: '#27503f', controlActiveBg: '#4ade80', gradientStart: '#4ade80', gradientMid: '#22c55e', gradientEnd: '#16a34a', chart: { hit: 'rgba(74, 222, 128, 0.8)', miss: 'rgba(148, 163, 184, 0.35)', text: '#e2e8f0' }, extra: { 'body': 'background-color: #1a2e26; background-image: radial-gradient(circle at 20% 20%, #2c5d4c 0%, #1a2e26 60%); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-color: rgba(74, 222, 128, 0.28);' } },
+        starlight: { name: '星光', bg: '#000', card: 'rgba(10, 10, 25, 0.6)', text: '#d1d5db', label: '#6b7280', value: '#d1d5db', border: '#3b82f6', accent: '#3b82f6', accentText: '#ffffff', success: '#34d399', cardShadow: '0 8px 30px rgba(59, 130, 246, 0.25)', controlBg: 'rgba(15, 18, 35, 0.85)', controlBorder: 'rgba(59, 130, 246, 0.45)', controlText: '#d1d5db', controlHoverBg: 'rgba(30, 41, 80, 0.9)', controlActiveBg: '#3b82f6', gradientStart: '#3b82f6', gradientMid: '#8b5cf6', gradientEnd: '#06b6d4', chart: { hit: 'rgba(59, 130, 246, 0.85)', miss: 'rgba(107, 114, 128, 0.35)', text: '#d1d5db' }, extra: { 'body': 'background-color: #000; background-image: radial-gradient(circle at 50% 0%, #0a0a19 0%, #000 70%); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-color: rgba(59, 130, 246, 0.35);', 'h1, h2, h4, .section-title, .metric-value': 'text-shadow: 0 0 12px rgba(59, 130, 246, 0.55);' } },
+        dusk: { name: '黄昏', bg: '#232526', card: 'rgba(20, 20, 20, 0.5)', text: '#F2F2F2', label: '#A9A9A9', value: '#F2F2F2', border: '#FF8C00', accent: '#FF8C00', accentText: '#000', success: '#98FB98', cardShadow: '0 8px 25px rgba(0, 0, 0, 0.55)', controlBg: 'rgba(40, 40, 42, 0.75)', controlBorder: 'rgba(255, 140, 0, 0.45)', controlText: '#F2F2F2', controlHoverBg: 'rgba(60, 58, 54, 0.9)', controlActiveBg: '#FF8C00', gradientStart: '#434343', gradientMid: '#fd746c', gradientEnd: '#232526', chart: { hit: 'rgba(255, 140, 0, 0.85)', miss: 'rgba(169, 169, 169, 0.35)', text: '#F2F2F2' }, extra: { 'body': 'background-color: #232526; background-image: linear-gradient(-45deg, #434343, #232526, #2c3e50, #fd746c); background-attachment: fixed;', '.card, .control-section': 'backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-color: rgba(255, 140, 0, 0.35);' } },
+        terra: { name: '赤土', bg: '#4a2a22', card: 'rgba(45, 30, 26, 0.6)', text: '#f2e9e4', label: '#a99985', value: '#f2e9e4', border: '#ff8c42', accent: '#ff8c42', accentText: '#2d1e1a', success: '#a7c957', cardShadow: '0 8px 25px rgba(0, 0, 0, 0.45)', controlBg: 'rgba(61, 40, 33, 0.85)', controlBorder: 'rgba(255, 140, 66, 0.45)', controlText: '#f2e9e4', controlHoverBg: 'rgba(90, 58, 47, 0.9)', controlActiveBg: '#ff8c42', gradientStart: '#ff8c42', gradientMid: '#c9ada7', gradientEnd: '#6b4235', chart: { hit: 'rgba(255, 140, 66, 0.85)', miss: 'rgba(169, 153, 133, 0.4)', text: '#f2e9e4' }, extra: { 'body': 'background-color: #4a2a22; background-image: linear-gradient(160deg, #4a2a22 0%, #2d1e1a 100%); background-attachment: fixed;', '.card, .control-section': 'border-color: rgba(255, 140, 66, 0.32); box-shadow: inset 0 0 0 1px rgba(255, 140, 66, 0.15), var(--card-shadow);' } },
     };
     const HOME_LIGHT_THEMES = ['light', 'material', 'cupertino_light', 'kawaii'];
     const homeAppearance = {
@@ -1118,21 +1037,69 @@ document.addEventListener('DOMContentLoaded', () => {
         apply() {
             const themeName = localStorage.getItem('theme');
             const vars = themeName && Object.prototype.hasOwnProperty.call(HOME_THEME_VARS, themeName) ? HOME_THEME_VARS[themeName] : null;
+            this.renderThemeName(vars ? vars.name : null);
             if (!vars) return;
             const rootStyle = document.documentElement.style;
             const setVar = (name, value) => { if (value) rootStyle.setProperty(name, value); };
+
+            // 1) 基础面：首页 --bg-color/--card-bg/--text-color/… → 日志页 --color-*
             setVar('--color-bg', vars.bg);
             setVar('--color-bg-card', vars.card);
             setVar('--color-bg-alt', vars.card);
-            setVar('--color-text-primary', vars.text);
+            // 首页 --text-color 与 --value-color 在日志页同属正文色：value 是首页给数值用的更强前景色
+            setVar('--color-text-primary', vars.value || vars.text);
             setVar('--color-text-secondary', vars.label);
             setVar('--color-border', vars.border);
             setVar('--color-accent-primary', vars.accent);
             setVar('--color-accent-primary-hover', vars.accent);
-            setVar('--color-accent-text', '#ffffff');
+            setVar('--color-accent-text', vars.accentText || '#ffffff');
+            setVar('--color-success', vars.success);
+            setVar('--glow-color', vars.accent ? hexToRgba(vars.accent, 0.18) : null);
+            setVar('--glow-border-color', vars.accent);
+            // 首页 --card-shadow 没有同名的日志页变量，映射到三级阴影的中档；sm/lg 由 CSS 自身按明暗取
+            setVar('--shadow-md', vars.cardShadow);
+
+            // 2) 渐变：首页 --gradient-start/mid/end → 日志页新增的 --gradient-*
+            //    接到 body::before 顶部渐变条、.stat-card.theme-gradient、.main-nav-slider 等真实元素（见 log_refactored.css）
+            setVar('--gradient-start', vars.gradientStart);
+            setVar('--gradient-mid', vars.gradientMid);
+            setVar('--gradient-end', vars.gradientEnd);
+
+            // 3) 控件：首页 --control-* → 日志页新增的 --control-*（select/input/.button 实际引用）
+            setVar('--control-bg', vars.controlBg);
+            setVar('--control-border', vars.controlBorder);
+            setVar('--control-text', vars.controlText);
+            setVar('--control-hover-bg', vars.controlHoverBg);
+            setVar('--control-active-bg', vars.controlActiveBg);
+            setVar('--control-active-text', vars.accentText);
+
             // 只切明暗底盘，使 --color-bg-blocked 等语义变量仍取合理值；其余语义变量保持 CSS 原值
             document.documentElement.dataset.theme = HOME_LIGHT_THEMES.includes(themeName) ? 'light' : 'dark';
+            this.applyExtraStyles(vars);
             this.applyBackground(vars);
+        },
+        // renderThemeName 写「界面主题」只读展示：日志页不再提供主题下拉，只显示首页选了哪套。
+        renderThemeName(name) {
+            const el = document.getElementById('theme-current-name');
+            if (el) el.textContent = name || '跟随首页（未设置）';
+        },
+        // applyExtraStyles 仿首页 setTheme 的注入方式：先移除旧的 #theme-extra-styles 再建新的。
+        // 选择器保持首页原文（.card / .control-section 等日志页同样存在），不改写成第二套。
+        applyExtraStyles(vars) {
+            const head = document.head;
+            const old = document.getElementById('theme-extra-styles');
+            if (old) old.remove();
+            if (!vars || !vars.extra) return;
+            const style = document.createElement('style');
+            style.id = 'theme-extra-styles';
+            style.textContent = Object.entries(vars.extra).map(([sel, rule]) => `${sel} { ${rule} }`).join('\n');
+            head.appendChild(style);
+        },
+        // chartPalette 供圆环图/折线图取当前主题配色；无主题时返回 null 由调用方回退内置色板。
+        chartPalette() {
+            const themeName = localStorage.getItem('theme');
+            const vars = themeName && Object.prototype.hasOwnProperty.call(HOME_THEME_VARS, themeName) ? HOME_THEME_VARS[themeName] : null;
+            return vars ? vars.chart : null;
         },
         applyBackground(vars) {
             const bgUrl = (localStorage.getItem('customBackgroundUrl') || '').trim();
@@ -1150,6 +1117,15 @@ document.addEventListener('DOMContentLoaded', () => {
             rootStyle.setProperty('--color-bg-card', canMix ? `color-mix(in srgb, ${vars.card} 88%, transparent)` : vars.card);
         }
     };
+    // hexToRgba 把 #rrggbb 转成 rgba()，用于把主题强调色降透明度后当 --glow-color；
+    // 非 #rrggbb（rgba()/transparent/颜色名）一律返回 null，由调用方跳过。
+    function hexToRgba(hex, alpha) {
+        if (typeof hex !== 'string') return null;
+        const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
+        if (!m) return null;
+        const n = parseInt(m[1], 16);
+        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+    }
 
     const animateValue = (element, start, end, duration, decimals = 0) => { if (!element || start === null || end === null) return; if (start === end) { element.textContent = (decimals > 0 ? parseFloat(end).toFixed(decimals) : Math.floor(end).toLocaleString()); return; } let startTimestamp = null; const step = (timestamp) => { if (!startTimestamp) startTimestamp = timestamp; const progress = Math.min((timestamp - startTimestamp) / duration, 1); const current = start + progress * (end - start); element.textContent = (decimals > 0 ? parseFloat(current).toFixed(decimals) : Math.floor(current).toLocaleString()); if (progress < 1) window.requestAnimationFrame(step); }; window.requestAnimationFrame(step); };
     const updateStatChange = (element, prev, curr, isTime = false) => { if (prev === null || curr === null || prev === 0) { element.style.visibility = 'hidden'; return; } const diff = curr - prev; const change = (diff / prev) * 100; if (Math.abs(change) < 0.1) { element.style.visibility = 'hidden'; return; } const direction = isTime ? (diff < 0 ? 'up' : 'down') : (diff > 0 ? 'up' : 'down'); const icon = direction === 'up' ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8L18 14H6L12 8Z"></path></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 16L6 10H18L12 16Z"></path></svg>'; element.className = `stat-change ${direction}`; element.innerHTML = `${icon} ${Math.abs(change).toFixed(1)}%`; element.style.visibility = 'visible'; };
@@ -1400,7 +1376,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return tr;
     }, 'lazy');
 
-    // 拦截排行：数据来自 rank/domain?domain_set=adguard，字段为 {key,count}，空列表走 renderTable 的「暂无拦截记录」空态
+    // 拦截排行：数据来自 rank/domain?blocked=true（后端按应答特征判定被拦截，涵盖 adguard 与 sd_ads 两种来源），
+    // 字段为 {key,count}，空列表走 renderTable 的「暂无拦截记录」空态（不显示 0）
     const renderTopBlocked = (data) => renderTable(elements.topBlockedBody, data, (item, index) => {
         const tr = document.createElement('tr');
         tr.dataset.rankIndex = index;
@@ -1498,7 +1475,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderSlowestQueries = (data) => renderTable(elements.slowestQueriesBody, data, renderSlowestQueryItemHTML, 'slowest');
 
-    const chartColors = ['#6d9dff', '#f778ba', '#2dd4bf', '#fb923c', '#a78bfa', '#fde047', '#ff8c8c', '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#64748b'];
+    // 分流规则集的中文显示名。未列出的 tag 原样显示，不报错（新增规则集不会白屏）。
+    // 只用于显示：state.shuntColors 索引、筛选下拉的 value、提交给 API 的参数一律仍用原始 tag。
+    const DOMAIN_SET_DISPLAY = {
+        high_priority_greylist: '灰名单 · 强制代理',
+        high_priority_whitelist: '白名单 · 强制国内',
+        geosite_gfw: '境外域名',
+        geosite_cn: '国内域名',
+        unmatched_rule: '未分类 · 走回退',
+        sd_ads: '广告拦截 · 规则集',
+        adguard: '广告拦截 · 引擎',
+    };
+    // dsLabel 把规则集 tag 转成中文别名；未收录的 tag 原样返回。
+    // 用 hasOwnProperty 判定：直接取 DOMAIN_SET_DISPLAY['constructor'] 会拿到原型上的函数
+    const dsLabel = k => (Object.prototype.hasOwnProperty.call(DOMAIN_SET_DISPLAY, k) ? DOMAIN_SET_DISPLAY[k] : k);
+
+    const BASE_CHART_COLORS = ['#6d9dff', '#f778ba', '#2dd4bf', '#fb923c', '#a78bfa', '#fde047', '#ff8c8c', '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#64748b'];
+    // chartColors 由首页主题的 chartColors 驱动：命中/未命中两色取主题色，其余扇区沿用内置色板。
+    // 主题在首页切换后，本页通过 storage 事件重绘（见 setupAppearanceSync）。
+    const chartColors = () => {
+        const palette = homeAppearance.chartPalette();
+        return palette ? [palette.hit, palette.miss, ...BASE_CHART_COLORS] : BASE_CHART_COLORS;
+    };
     const renderDonutChart = (data) => {
         const placeholder = elements.shuntResultsBody.querySelector('.lazy-placeholder');
         if (placeholder) placeholder.style.display = 'none';
@@ -1507,20 +1505,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const total = data.reduce((sum, item) => sum + item.count, 0);
+        const series = chartColors();
         const radius = 72; const circumference = 2 * Math.PI * radius; let offset = 0; state.shuntColors = {};
         const paths = data.map((item, index) => {
             const percent = (item.count / total);
             const strokeDashoffset = circumference - (percent * circumference);
-            const color = chartColors[index % chartColors.length];
+            const color = series[index % series.length];
+            // 配色索引必须用原始 key：换成中文别名会串色（别名不是稳定的配色键）
             state.shuntColors[item.key] = color;
-            const path = `<circle cx="80" cy="80" r="${radius}" fill="transparent" stroke="${color}" stroke-width="16" stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}" transform="rotate(${offset * 360} 80 80)"></circle>`;
+            // 扇区本身给一个原生 <title> tooltip：显示中文别名，同时带上原始 tag
+            const sliceTitle = escapeHtml(`${dsLabel(item.key)} (${item.key}) ${item.count.toLocaleString()} · ${(percent * 100).toFixed(1)}%`);
+            const path = `<circle cx="80" cy="80" r="${radius}" fill="transparent" stroke="${color}" stroke-width="16" stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}" transform="rotate(${offset * 360} 80 80)"><title>${sliceTitle}</title></circle>`;
             offset += percent;
             return path;
         }).join('');
         const legend = data.map((item, index) => {
             const percent = ((item.count / total) * 100).toFixed(1);
-            const color = chartColors[index % chartColors.length];
-            return `<li class="donut-legend-item"><span class="legend-color-box" style="background-color: ${color};"></span><span class="legend-label truncate-text" title="${item.key}">${item.key}</span><span class="legend-value">${item.count.toLocaleString()} (${percent}%)</span></li>`;
+            const color = series[index % series.length];
+            // 显示用中文别名，title 保留原始 tag；配色索引仍在上面的 paths 里用 item.key
+            return `<li class="donut-legend-item"><span class="legend-color-box" style="background-color: ${color};"></span><span class="legend-label truncate-text" title="${item.key}">${dsLabel(item.key)}</span><span class="legend-value">${item.count.toLocaleString()} (${percent}%)</span></li>`;
         }).join('');
         elements.shuntResultsBody.innerHTML = `<div class="donut-chart-wrapper"><div class="donut-chart"><svg viewBox="0 0 160 160">${paths}</svg><div class="donut-chart-center-text"><div class="total">${total.toLocaleString()}</div><div class="label">总计</div></div></div><ul class="donut-legend">${legend}</ul></div>`;
     };
@@ -1536,6 +1539,160 @@ document.addEventListener('DOMContentLoaded', () => {
         const controller = new AbortController();
         cardRequestControllers.set(cardKey, controller);
         return controller.signal;
+    };
+
+    // ---- /log 概览页模块拖动排版（与首页 mosdnsp.html 的实现并行、互不引用） ----
+    // 后端 GET/POST /api/v1/layout/?page=log 由 coremain/api_layout.go 提供，响应体是裸数组（["log-top-domains", ...]）。
+    // 与首页共用同一个 panel_layout.json，但按 page 分键，互不覆盖。
+    const DEFAULT_LOG_MODULE_LAYOUT = ['log-top-domains', 'log-top-blocked', 'log-top-clients',
+        'log-upstream-stats', 'log-slowest-queries', 'log-shunt-results'];
+    const LOG_LAYOUT_TIMEOUT = 3000;
+    const logLayoutManager = {
+        layout: DEFAULT_LOG_MODULE_LAYOUT.slice(),
+        saveTimer: null,
+        draggingId: null,
+
+        grid() { return document.querySelector('.overview-grid'); },
+
+        // 已知 id 按存档顺序排前，缺失的按默认顺序补末尾；未知 id（后端新增模块）排到数组末尾但不报错
+        normalize(saved) {
+            const order = [];
+            DEFAULT_LOG_MODULE_LAYOUT.forEach(id => {
+                if (Array.isArray(saved) && saved.includes(id) && !order.includes(id)) order.push(id);
+            });
+            DEFAULT_LOG_MODULE_LAYOUT.forEach(id => { if (!order.includes(id)) order.push(id); });
+            if (Array.isArray(saved)) {
+                saved.forEach(id => {
+                    // 只接受字符串标识；不在已知列表里的也保留，落到末尾
+                    if (typeof id === 'string' && id && !order.includes(id)) order.push(id);
+                });
+            }
+            return order;
+        },
+
+        apply(order) {
+            const grid = this.grid();
+            if (!grid) return;
+            this.layout = this.normalize(order);
+            this.layout.forEach((id, index) => {
+                const node = grid.querySelector(`[data-module="${id}"]`);
+                if (node) node.style.order = String(index);
+            });
+        },
+
+        // page 参数统一走 URLSearchParams，绝不手拼查询串
+        url() {
+            const params = new URLSearchParams();
+            params.set('page', 'log');
+            return `/api/v1/layout/?${params.toString()}`;
+        },
+
+        // GET 失败/超时静默降级为默认顺序，不弹窗阻塞页面
+        async load() {
+            if (!this.grid()) return;
+            let saved = null;
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = controller ? setTimeout(() => controller.abort(), LOG_LAYOUT_TIMEOUT) : null;
+            try {
+                const res = await fetch(this.url(), controller ? { signal: controller.signal } : undefined);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data)) saved = data;
+                }
+            } catch (_) {
+                // 读取失败或超时：保持默认顺序，页面照常可用
+                saved = null;
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+            this.apply(saved === null ? DEFAULT_LOG_MODULE_LAYOUT.slice() : saved);
+        },
+
+        // POST 只提交 data-module 值；失败时 toast 提示，但本会话内布局仍生效
+        async save() {
+            try {
+                const res = await fetch(this.url(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.layout.slice())
+                });
+                if (!res.ok) throw new Error(`保存布局失败: ${res.status}`);
+            } catch (_) {
+                ui.showToast('布局保存失败（本次会话内仍生效）', 'error');
+            }
+        },
+
+        scheduleSave() {
+            if (this.saveTimer) clearTimeout(this.saveTimer);
+            this.saveTimer = setTimeout(() => {
+                this.saveTimer = null;
+                this.save();
+            }, 500);
+        },
+
+        // 把 sourceId 移到 targetId 之前/之后，立即重排并防抖持久化
+        move(sourceId, targetId, placeBefore) {
+            if (!sourceId || !targetId || sourceId === targetId) return;
+            const order = this.layout.slice();
+            const from = order.indexOf(sourceId);
+            if (from < 0) return;
+            order.splice(from, 1);
+            const to = order.indexOf(targetId);
+            if (to < 0) return;
+            order.splice(placeBefore ? to : to + 1, 0, sourceId);
+            this.apply(order);
+            this.scheduleSave();
+        },
+
+        // 原生 HTML5 DnD：只有 hover + 精细指针环境才设 draggable，移动端不挂拖拽
+        setupDragAndDrop() {
+            const grid = this.grid();
+            if (!grid) return;
+            const canDrag = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+            const nodes = Array.from(grid.querySelectorAll('[data-module]'));
+            nodes.forEach(node => {
+                const moduleId = node.dataset.module;
+                if (canDrag) {
+                    node.setAttribute('draggable', 'true');
+                    node.addEventListener('dragstart', (e) => {
+                        this.draggingId = moduleId;
+                        node.classList.add('dragging');
+                        if (e.dataTransfer) {
+                            e.dataTransfer.setData('text/plain', moduleId);
+                            e.dataTransfer.effectAllowed = 'move';
+                        }
+                    });
+                    node.addEventListener('dragend', () => {
+                        this.draggingId = null;
+                        node.classList.remove('dragging');
+                        nodes.forEach(peer => peer.classList.remove('drag-over'));
+                    });
+                }
+                node.addEventListener('dragover', (e) => {
+                    if (!this.draggingId || this.draggingId === moduleId) return;
+                    e.preventDefault();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                    node.classList.add('drag-over');
+                });
+                node.addEventListener('dragleave', () => node.classList.remove('drag-over'));
+                node.addEventListener('drop', (e) => {
+                    if (!this.draggingId || this.draggingId === moduleId) return;
+                    e.preventDefault();
+                    node.classList.remove('drag-over');
+                    // 落点按鼠标在中线的前半/后半决定插入到目标之前还是之后
+                    const rect = node.getBoundingClientRect();
+                    const placeBefore = (e.clientX - rect.left) < rect.width / 2;
+                    this.move(this.draggingId, moduleId, placeBefore);
+                    this.draggingId = null;
+                });
+            });
+        },
+
+        async init() {
+            if (!this.grid()) return;
+            this.setupDragAndDrop();
+            await this.load();
+        }
     };
 
     async function updatePageData(forceAll = false) {
@@ -1593,7 +1750,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 其他重数据仅在手动刷新(forceAll)时加载
                 if (forceAll) {
                     sysPromises.push(cacheManager.updateStats(signal));
-                    sysPromises.push(switchManager.loadStatus(signal));
                     sysPromises.push(systemInfoManager.load(signal));
 //                    sysPromises.push(updateManager.refreshStatus(false));
                 }
@@ -1656,8 +1812,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!Array.isArray(list)) return;
                 list.slice(0, 25).forEach(item => {
                     const option = document.createElement('option');
+                    // value 必须是原始 tag：筛选参数原样提交给后端，别名只用于显示
                     option.value = item.key;
-                    option.textContent = `${item.key} (${item.count})`;
+                    option.textContent = `${dsLabel(item.key)} (${item.count})`;
+                    option.title = item.key;
                     select.appendChild(option);
                 });
             }).catch(() => { });
@@ -1819,9 +1977,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     })();
 
-    // 绑定 info-icon 的提示（功能开关说明）
+    // 绑定 info-icon 的提示（日志容量等模块的说明图标）
     function bindInfoIconTooltips() {
-        const scope = elements.featureSwitchesModule || document;
+        const scope = document;
         const icons = scope.querySelectorAll('.info-icon');
         icons.forEach(icon => {
             if (icon.dataset.tooltipBound) return;
@@ -1870,7 +2028,8 @@ document.addEventListener('DOMContentLoaded', () => {
         queryInfo['类型'] = `<span>${data.query_type || 'N/A'}</span>`;
         if (data.query_class) queryInfo['类别'] = `<span>${data.query_class}</span>`;
         if (data.domain_set) { const ruleLabel = getRuleSetLabel(data); queryInfo['分流规则'] = createInteractiveLine(escapeHtml(ruleLabel), escapeHtml(ruleLabel), escapeHtml(data.domain_set), true); }
-        if (data.matched_rule) queryInfo['命中规则'] = createInteractiveLine(escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), true);
+        // 命中规则：显示走 dsLabel（未收录的规则原文原样返回），过滤 value 仍提交原始值
+        if (data.matched_rule) queryInfo['命中规则'] = createInteractiveLine(escapeHtml(dsLabel(data.matched_rule)), escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), true);
         if (data.trace_id) queryInfo['Trace ID'] = createInteractiveLine(data.trace_id, data.trace_id, data.trace_id, true);
 
         responseInfo['耗时'] = `<span>${data.duration_ms.toFixed(2)} ms</span>`;
@@ -1887,11 +2046,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const getContrastingTextColor = (hexColor) => { if (!hexColor || hexColor.length < 4) return '#0f172a'; let r = parseInt(hexColor.substr(1, 2), 16), g = parseInt(hexColor.substr(3, 2), 16), b = parseInt(hexColor.substr(5, 2), 16); const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000; return (yiq >= 128) ? '#0f172a' : '#ffffff'; };
-    // 命中规则集（filter_list）来自审计记录字段，文案不硬编码任何规则集名
+    // 命中规则集（filter_list）来自审计记录字段，文案不硬编码任何规则集名。
+    // tag 部分走 dsLabel 显示中文别名；filter_list 是数据源的具体规则名，原样显示。
     function getRuleSetLabel(log) {
         if (!log || !log.domain_set) return '';
         const filterList = (log.filter_list || '').trim();
-        return filterList ? `${log.domain_set} · ${filterList}` : log.domain_set;
+        const tagLabel = dsLabel(log.domain_set);
+        return filterList ? `${tagLabel} · ${filterList}` : tagLabel;
     }
     function getRuleTagHTML(log) {
         if (!log || !log.domain_set) return '';
@@ -1900,7 +2061,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!bgColor) { let hash = 0; for (let i = 0; i < ruleName.length; i++) hash = ruleName.charCodeAt(i) + ((hash << 5) - hash); bgColor = `hsl(${Math.abs(hash % 360)}, 70%, 45%)`; }
         const textColor = '#ffffff';
         const label = getRuleSetLabel(log);
-        const titleParts = [`分流规则: ${label}`];
+        // title 保留原始 tag，别名只在显示层使用
+        const titleParts = [`分流规则: ${ruleName}`];
         if (log.matched_rule) titleParts.push(`命中规则: ${log.matched_rule}`);
         return `<span class="rule-tag" style="background-color: ${bgColor}; color: ${textColor};" title="${titleParts.map(part => escapeHtml(part)).join('&#10;')}">${escapeHtml(label)}</span>`;
     }
@@ -1978,7 +2140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             queryInfo['类型'] = `<small>${data.query_type || 'N/A'}</small>`;
             if (data.query_class) queryInfo['类别'] = `<small>${data.query_class}</small>`;
             if (data.domain_set) { const ruleLabel = getRuleSetLabel(data); queryInfo['规则'] = createInteractiveLine(escapeHtml(ruleLabel), escapeHtml(ruleLabel), escapeHtml(data.domain_set), true, true); }
-            if (data.matched_rule) queryInfo['命中规则'] = createInteractiveLine(escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), true, true);
+            if (data.matched_rule) queryInfo['命中规则'] = createInteractiveLine(escapeHtml(dsLabel(data.matched_rule)), escapeHtml(data.matched_rule), escapeHtml(data.matched_rule), true, true);
             responseInfo['耗时'] = `<small>${data.duration_ms.toFixed(2)} ms</small>`;
             responseInfo['状态'] = `<small>${data.response_code || 'N/A'}${data.is_blocked ? ' (Blocked)' : ''}</small>`;
             if (flagItems.length) responseInfo['标志'] = `<small>${flagItems.join(', ')}</small>`;
@@ -2274,9 +2436,9 @@ function renderRuleTable(tbody, rules, mode) {
 
             const html = itemsToRender.map(item => `
                 <tr>
-                    <td>${item.count}</td>
-                    <td>${item.date}</td>
-                    <td>${item.domain}</td>
+                    <td>${item.count || '--'}</td>
+                    <td>${item.date || '--'}</td>
+                    <td>${item.domain || '--'}</td>
                 </tr>
             `).join('');
             tbody.insertAdjacentHTML('beforeend', html);
@@ -2512,8 +2674,16 @@ const cacheManager = {
         }
     };
 
+    // 病态输入的保护上限：超过这个行数就停止读取，宁可显示「行数未知」也不让页面长时间占着主线程
+    const LIST_HARD_LINE_CEILING = 500000;
+
     const listManager = {
-        MAX_LINES: 10000,
+        // 2000 行足够判断内容，且一次性 join + 赋值远低于 10ms；后端 /show 忽略 limit，仍会全量传输，所以只在前端截断
+        MAX_LINES: 2000,
+        // PREFERRED_FIRST 是首屏默认选中项的优先顺序：优先手动维护的小名单，
+        // 避免一进来就加载 11 万行的 geosite_cn（它在 /api/v1/lists 里排第一）。
+        // 表里没有的 tag 自动跳过，最终回退到接口返回的第一项，再回退到 ddns_hosts。
+        PREFERRED_FIRST: ['blocklist', 'high_priority_whitelist', 'high_priority_greylist', 'ddns_hosts'],
         currentTag: null,
         // LIST_DISPLAY_NAMES 是 tag → 中文展示名的映射表，和后端 /api/v1/lists 的 name 字段一致。
         // 前端优先用本表：后端没升级（仍返回 my_hosts.txt 这种文件名）时 nav 也能显示中文。
@@ -2534,18 +2704,22 @@ const cacheManager = {
         },
         // FALLBACK_PROFILES 是兜底名单：/api/v1/lists 请求失败、返回非数组或空数组时回退到这里，
         // 保证左侧 nav 不会空白、页面照常可用；正常情况下一律使用接口返回的 tag。
-        // 这里是本项目配置里真实存在的 7 个名单，不能写配置里没有的 tag（点了只会拿到 API 路由表）。
+        // 端点对照（curl 127.0.0.1:9198/plugins/__nonexistent__ 拿到的服务端路由表）确认：
+        // 这里只能写 /plugins/<tag>/{show,post,config} 真实存在的 tag。
+        // 原表里的 geoip_cn / geoip_private 在路由表里没有对应插件（真实 tag 是 si_cn / si_private），
+        // 点击只会换回 API 路由表，已按真实 tag 修正；geosite_cn 的 kind 也按接口值改回 text。
         FALLBACK_PROFILES: [
-            { tag: 'ddns_hosts', name: '静态域名映射' },
-            { tag: 'blocklist', name: '黑名单（手动拦截）' },
-            { tag: 'sd_nocn', name: '国外域名集储备(SRS)' },
-            { tag: 'sd_tld', name: '国外TLD储备(SRS)' },
-            { tag: 'high_priority_whitelist', name: '白名单（强制直连）' },
-            { tag: 'high_priority_greylist', name: '灰名单（优先代理）' },
-            { tag: 'geosite_cn', name: '国内域名集(SRS)', kind: 'sd_set' },
-            { tag: 'geosite_gfw', name: '国外域名集' },
-            { tag: 'geoip_cn', name: '国内 IP 段' },
-            { tag: 'geoip_private', name: '内网 IP 段' }
+            { tag: 'ddns_hosts', name: '静态域名映射', kind: 'text' },
+            { tag: 'blocklist', name: '黑名单（手动拦截）', kind: 'text' },
+            { tag: 'high_priority_whitelist', name: '白名单（强制直连）', kind: 'text' },
+            { tag: 'high_priority_greylist', name: '灰名单（优先代理）', kind: 'text' },
+            { tag: 'sd_nocn', name: '国外域名集储备(SRS)', kind: 'sd_set' },
+            { tag: 'sd_tld', name: '国外TLD储备(SRS)', kind: 'sd_set' },
+            { tag: 'sd_ads', name: '广告拦截(SRS)', kind: 'sd_set' },
+            { tag: 'geosite_cn', name: '国内域名集(SRS)', kind: 'text' },
+            { tag: 'geosite_gfw', name: '国外域名集', kind: 'text' },
+            { tag: 'si_cn', name: '国内 IP 段(SRS)', kind: 'text' },
+            { tag: 'si_private', name: '内网 IP 段(SRS)', kind: 'text' }
         ],
         // profiles 是当前生效的名单条目（接口返回优先，失败时为兜底名单）；editable 为 false 的条目只读。
         profiles: [],
@@ -2615,8 +2789,11 @@ const cacheManager = {
             }
             if (items.length > 0) this.renderNav(items);
             // nav 就绪后再按首项 tag 走原有 loadList；首屏仍交给空闲时机，避免刷新时卡顿
+            // 首屏默认选中项：优先手动维护的小名单，避免一进来就拉 11 万行的规则集（geosite_cn 在接口里排第一）
             // 兜底首项也要用真实 tag：whitelist 之类的 tag 本项目不存在，只会换来 API 路由表
-            const firstTag = this.profiles.length > 0 ? this.profiles[0].tag : 'ddns_hosts';
+            const firstTag = this.PREFERRED_FIRST.find(t => this.hasProfile(t))
+                || (this.profiles[0] && this.profiles[0].tag)
+                || 'ddns_hosts';
             const startLoad = () => this.loadList(firstTag);
             if ('requestIdleCallback' in window) requestIdleCallback(startLoad, { timeout: 2000 });
             else setTimeout(startLoad, 1200);
@@ -2635,23 +2812,46 @@ const cacheManager = {
             return text.startsWith('Invalid request ') || text.indexOf('Available api urls:') !== -1;
         },
 
+        // isAutoProfile 判定条目落入「规则集（自动）」分组：后端标了 editable:false 的只读名单，
+        // 或 kind 为 sd_set / si_set 的数据源管理名单（SRS 生成物，内容由数据源更新覆盖）。
+        // 依据一律取接口下发的字段，不在前端另建只读 tag 名单，避免与后端形成双真源。
+        isAutoProfile(item) {
+            if (!item) return false;
+            return item.editable === false || this.isDataSourceKind(item.kind);
+        },
+
         // renderNav 用条目数组重建左侧 nav：链接标记仍为 .list-mgmt-link + data-list-tag，
         // 因此 init 里既有的点击委托与 loadList 的 active 切换逻辑无需改动。
+        // 渲染顺序：可手动编辑的小名单在前，SRS 规则集在后，各带一个小标题；
+        // this.profiles 仍保存接口原始顺序，只影响视觉分组，不改任何 tag 取值。
         renderNav(items) {
             this.profiles = items;
             elements.listMgmtNav.innerHTML = '';
             const activeTag = (this.currentTag && items.some(item => item.tag === this.currentTag))
                 ? this.currentTag
-                : (items.length > 0 ? items[0].tag : '');
-            items.forEach(item => {
-                const link = document.createElement('a');
-                link.href = '#';
-                link.className = 'list-mgmt-link';
-                link.dataset.listTag = item.tag;
-                link.textContent = item.name || item.tag;
-                if (item.tag === activeTag) link.classList.add('active');
-                elements.listMgmtNav.appendChild(link);
-            });
+                : (this.PREFERRED_FIRST.find(t => items.some(item => item.tag === t))
+                    || (items[0] && items[0].tag)
+                    || '');
+            const manualItems = items.filter(item => !this.isAutoProfile(item));
+            const autoItems = items.filter(item => this.isAutoProfile(item));
+            const appendGroup = (title, groupItems) => {
+                if (groupItems.length === 0) return;
+                const groupTitle = document.createElement('div');
+                groupTitle.className = 'list-mgmt-group-title';
+                groupTitle.textContent = title;
+                elements.listMgmtNav.appendChild(groupTitle);
+                groupItems.forEach(item => {
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.className = 'list-mgmt-link';
+                    link.dataset.listTag = item.tag;
+                    link.textContent = item.name || item.tag;
+                    if (item.tag === activeTag) link.classList.add('active');
+                    elements.listMgmtNav.appendChild(link);
+                });
+            };
+            appendGroup('手动维护', manualItems);
+            appendGroup('规则集（自动）', autoItems);
         },
 
         // applyListEditable 按条目的 editable 切换文本框只读与保存按钮禁用，并显示/隐藏只读提示。
@@ -2674,7 +2874,7 @@ const cacheManager = {
             const hint = document.createElement('p');
             hint.id = 'list-mgmt-readonly-hint';
             hint.style.cssText = 'display: none; font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 0.75rem;';
-            hint.textContent = '此类名单请在『在线分流』或配置文件里维护';
+            hint.textContent = '此名单由数据源自动生成，修改请到『数据源管理』，手工改动会被自动更新覆盖';
             container.insertBefore(hint, textarea);
             this.readonlyHint = hint;
             return hint;
@@ -2796,7 +2996,7 @@ const cacheManager = {
                 : '<span class="response-tag other">停用</span>';
             tr.innerHTML = `<td><span class="truncate-text" title="${this.esc(source.name)}">${this.esc(source.name)}</span></td>
                 <td><span class="truncate-text" title="${this.esc(url)}">${this.esc(url)}</span></td>
-                <td class="text-right">${(source.rule_count || 0).toLocaleString()}</td>
+                <td class="text-right">${source.rule_count ? source.rule_count.toLocaleString() : '--'}</td>
                 <td>${this.formatSourceTime(source.last_updated)}</td>
                 <td class="text-center">${status}</td>
                 <td class="text-center">
@@ -3010,11 +3210,10 @@ const cacheManager = {
             ui.setLoading(elements.listSaveBtn, true);
 
             try {
-                // 流式读取，最多加载 MAX_LINES 行，避免一次性 split 大字符串拖慢主线程
-// 这里的 this.MAX_LINES 是 10000
-const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, { 
-    signal: this._abortController.signal 
-});
+                // 流式读取，最多保留 MAX_LINES 行；收集阶段只用数组 push，绝不逐行写 DOM
+                const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
+                    signal: this._abortController.signal
+                });
 
                 if (!res.ok) {
                     // 失败时后端回的是 API 路由表/错误正文：只进 console，绝不写进编辑框
@@ -3026,10 +3225,12 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                     throw httpError;
                 }
                 const reader = res.body?.getReader();
-                let totalLines = 0, shownLines = 0;
+                // lines 只装前 MAX_LINES 行；totalLines 是整份名单的真实行数（计数很便宜，不需要存内容）
+                const lines = [];
+                let totalLines = 0;
+                let truncated = false;
                 let buffer = '';
-                const CHUNK_LIMIT = this.MAX_LINES; // 达到就停止
-                let cancelled = false;
+                const CHUNK_LIMIT = this.MAX_LINES; // 保留上限，超出的只计数不入数组
                 if (reader) {
                     const decoder = new TextDecoder();
                     while (true) {
@@ -3050,30 +3251,30 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                                     if (next.done) break;
                                     rest += decoder.decode(next.value, { stream: true });
                                 }
+                                try { reader.cancel(); } catch (_) { }
                                 const apiBodyError = new Error('API 路由表');
                                 apiBodyError.apiRouteTable = rest;
                                 throw apiBodyError;
                             }
-                            if (shownLines < CHUNK_LIMIT) {
-                                elements.listContentTextArea.value += (shownLines ? '\n' : '') + line;
-                                shownLines++;
-                            }
-                            if (shownLines >= CHUNK_LIMIT) {
-                                // 够了，取消后续读取
-                                cancelled = true;
-                                try { reader.cancel(); } catch (_) { }
-                                break;
+                            if (lines.length < CHUNK_LIMIT) {
+                                lines.push(line);
+                            } else {
+                                truncated = true;
+                                // 只计数不存内容：能省掉 10 万次字符串拼接，同时保留「共 N 行」的真实总数
+                                if (totalLines >= LIST_HARD_LINE_CEILING) {
+                                    // 病态输入的保护：超过硬上限就停止读取，提示退回「行数未知」
+                                    try { reader.cancel(); } catch (_) { }
+                                    break;
+                                }
                             }
                         }
-                        if (cancelled) break;
+                        if (totalLines >= LIST_HARD_LINE_CEILING) break;
                     }
-                    // 剩余缓冲
-                    if (!cancelled && buffer.length > 0) {
+                    // 剩余缓冲：最后一行没有换行符时也要算进去
+                    if (buffer.length > 0 && totalLines < LIST_HARD_LINE_CEILING) {
                         totalLines++;
-                        if (shownLines < CHUNK_LIMIT) {
-                            elements.listContentTextArea.value += (shownLines ? '\n' : '') + buffer;
-                            shownLines++;
-                        }
+                        if (lines.length < CHUNK_LIMIT) lines.push(buffer);
+                        else truncated = true;
                     }
                 } else {
                     // 兼容不支持流式的环境
@@ -3085,11 +3286,20 @@ const res = await fetch(`/plugins/${tag}/show?limit=${this.MAX_LINES}`, {
                     }
                     const parts = text.split('\n');
                     totalLines = parts.length;
-                    elements.listContentTextArea.value = parts.slice(0, CHUNK_LIMIT).join('\n');
-                    shownLines = Math.min(totalLines, CHUNK_LIMIT);
+                    lines.push(...parts.slice(0, CHUNK_LIMIT));
+                    truncated = totalLines > CHUNK_LIMIT;
                 }
-                if (shownLines >= CHUNK_LIMIT) elements.listContentInfo.textContent = `内容较长，已仅加载前 ${CHUNK_LIMIT} 行。`;
-                else elements.listContentInfo.textContent = `共 ${shownLines} 行。`;
+                // 关键：一次性赋值，只触发一次重排（此前逐行 += 是 O(n^2) 卡死的主因）
+                elements.listContentTextArea.value = lines.join('\n');
+                const shownLines = lines.length;
+                const totalKnown = totalLines >= LIST_HARD_LINE_CEILING ? 0 : totalLines;
+                if (truncated) {
+                    elements.listContentInfo.textContent = totalKnown > CHUNK_LIMIT
+                        ? `只显示前 ${CHUNK_LIMIT} 行（共 ${totalKnown} 行）。规则集类名单受数据源管理，不建议在此手工编辑。`
+                        : `内容较长，已仅加载前 ${CHUNK_LIMIT} 行。`;
+                } else {
+                    elements.listContentInfo.textContent = `共 ${shownLines} 行。`;
+                }
             } catch (error) {
                 if (error?.name === 'AbortError') {
                     // 用户快速切换导致的中断，不提示错误
@@ -3715,14 +3925,50 @@ const handleInteractiveClick = (e) => {
                 updateManager.refreshStatus(false);
             }
         });
-        watch('#feature-switches-module', () => switchManager.loadStatus());
         watch('#cache-stats-table', () => cacheManager.updateStats());
+    }
+
+    // setupOffscreenAnimationPause 让循环动画离屏时暂停（离屏元素每帧仍会被合成器刷新，白耗电）。
+    // 观察对象就是 CSS 里保留下来的那几类无限循环：状态指示灯、加载中的 spin、骨架屏。
+    function setupOffscreenAnimationPause() {
+        if (typeof IntersectionObserver === 'undefined') return;
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach(entry => entry.target.classList.toggle('anim-paused', !entry.isIntersecting));
+        }, { rootMargin: '120px' });
+        const observeAll = (root) => {
+            (root || document).querySelectorAll('.status-indicator.running, .skeleton, .refresh-btn[aria-busy="true"] svg, #initial-loader')
+                .forEach(el => io.observe(el));
+        };
+        observeAll(document);
+        // 动态渲染出来的骨架屏/状态灯后续也要纳入观察（节流到下一帧，避免批量渲染时重复扫描）
+        const mo = new MutationObserver(() => {
+            if (mo._scheduled) return;
+            mo._scheduled = true;
+            requestAnimationFrame(() => { mo._scheduled = false; observeAll(document); });
+        });
+        mo.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // setupAppearanceSync 让「首页改了主题，已经打开的日志页」也跟着变：
+    // storage 事件只在另一个标签页改 localStorage 时触发，正好是这里要的场景。
+    // 重绘依赖主题配色的图表（圆环图 state.shuntColors / 折线图渐变），否则颜色不跟着变。
+    function setupAppearanceSync() {
+        window.addEventListener('storage', (e) => {
+            if (e.key !== 'theme' && e.key !== 'customBackgroundUrl') return;
+            homeAppearance.apply();
+            if (state.domainSetRank && state.domainSetRank.length) renderDonutChart(state.domainSetRank);
+            if (elements.bigSparklineMerged && state.history.timestamps.length) {
+                elements.bigSparklineMerged.innerHTML = generateDualSparklineSVG(state.history.totalQueries, state.history.avgDuration, state.history.timestamps, elements.bigSparklineMerged.clientWidth || 800, 200);
+            }
+        });
     }
 
     async function init() {
         state.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         themeManager.init();
         homeAppearance.apply();
+        setupAppearanceSync();
+        setupOffscreenAnimationPause();
         // 根据进入页签决定是否首屏加载别名（仅日志/概览需要）。避免 system-control 首屏的额外请求。
         const firstHash = window.location.hash || '#overview';
         const firstTab = (document.querySelector(`.tab-link[href="${firstHash}"]`)?.dataset.tab) || firstHash.replace('#', '');
@@ -3745,7 +3991,6 @@ const handleInteractiveClick = (e) => {
         autoRefreshManager.loadSettings();
         tableSorter.init();
         initLogFilters();
-        switchManager.init();
         // 绑定 info-icon 提示（例如日志容量的说明图标）
         bindInfoIconTooltips();
         updateManager.init();
@@ -3764,8 +4009,8 @@ const handleInteractiveClick = (e) => {
             // 延迟500ms后开始预加载，避免阻塞首屏
             setTimeout(() => {
                 // 预加载系统控制页的关键模块
+                // 「功能开关」模块已移除，此项预加载随之取消；数组保留，后续新增预加载项放这里
                 Promise.allSettled([
-                    switchManager.loadStatus(),
 //                    updateManager.refreshStatus(false)
                 ]).catch(() => { });
             }, 500);
@@ -3778,6 +4023,8 @@ const handleInteractiveClick = (e) => {
         if (initialLink) handleNavigation(initialLink);
         // 子页签的 active 切换与 listManager.init() 复用既有的 sub-nav 点击事件，不另造一套 hash 解析
         if (firstHash === '#list-mgmt') document.querySelector('.sub-nav-link[data-sub-tab="list-mgmt"]')?.click();
+        // 概览页模块拖拽顺序：先挂 DnD 再用后端存档重排；失败静默降级为默认顺序
+        logLayoutManager.init();
         // 首屏统一轻量刷新，所有重数据由懒加载或"刷新"按钮触发
         await updatePageData(false);
         if (document.fonts?.ready) await document.fonts.ready;
@@ -3847,8 +4094,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 mod.dataset.category = 'basic';
             } else if (id === 'system-info-module' || id === 'update-module') {
                 mod.dataset.category = 'system';
-            } else if (id === 'feature-switches-module') {
-                mod.dataset.category = 'advanced';
             } else if (mod.querySelector('#cache-stats-table')) {
                 mod.dataset.category = 'data';
             } else if (index < 4 && mod.classList.contains('control-module--mini')) {
@@ -3870,8 +4115,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     mod.dataset.category = 'basic';
                 } else if (id === 'system-info-module' || id === 'update-module') {
                     mod.dataset.category = 'system';
-                } else if (id === 'feature-switches-module') {
-                    mod.dataset.category = 'advanced';
                 } else if (mod.querySelector('#cache-stats-table')) {
                     mod.dataset.category = 'data';
                 } else if (mod.classList.contains('control-module--mini')) {

@@ -295,10 +295,11 @@
         .accordion-header.active::after { transform: rotate(-180deg); }
         .accordion-panel {
             max-height: 0; overflow: hidden;
-            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
             background-color: var(--card-bg); padding: 0 1.2rem;
+            opacity: 0; transform: translateY(-4px);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
         }
-        .accordion-panel.active { padding: 1.2rem; }
+        .accordion-panel.active { padding: 1.2rem; opacity: 1; transform: translateY(0); }
         .accordion-panel .metadata-table { margin-bottom: 1.2rem; }
         .accordion-panel pre {
             background-color: var(--control-bg); color: var(--text-color);
